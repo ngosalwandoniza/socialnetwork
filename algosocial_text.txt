@@ -1,0 +1,166 @@
+Good — this is where your idea becomes intelligent without “AI hype.”Algorithms here don’t mean neural networks yet. They mean clear rules, scoring, and flow.
+I’ll break this into practical algorithms you actually need, written in a way you can code in Django easily.
+🧠 CORE ALGORITHMS FOR YOUR PLATFORM
+We’ll cover 6 algorithms:
+Location room assignment
+Presence & activity tracking
+People suggestion scoring
+Feed ranking
+Ephemeral content expiry
+Streak calculation
+No ML. All deterministic. MVP-safe.
+1️⃣ LOCATION ROOM ASSIGNMENT ALGORITHM
+Goal: Decide which place a user belongs to right now.
+Inputs
+User GPS (lat, lon)
+List of predefined geofences (campus, mall, building)
+Accuracy threshold
+Algorithm (Simple & Safe)
+FOR each geofence:
+    IF user_location INSIDE geofence:
+        assign user to that location room
+        break
+ELSE:
+    user is "not in a room"
+Important Rules
+Use coarse accuracy (50–100m)
+Do NOT update every second
+Update only on:
+app open
+significant movement
+heartbeat every 2–5 minutes
+✅ Prevents battery drain✅ Prevents stalking
+2️⃣ PRESENCE & ACTIVITY TRACKING
+Goal: Know who is “active here now”.
+Presence Model (Redis-based)
+user_id → location_id → last_seen_timestamp
+Algorithm
+IF now - last_seen < ACTIVE_THRESHOLD (e.g. 5 min):
+    user is active
+ELSE:
+    user is inactive (removed from room)
+This is eventual consistency, which is fine.
+3️⃣ PEOPLE SUGGESTION ALGORITHM (VERY IMPORTANT)
+This is your core intelligence.
+Signals (Weights)
+Signal
+Weight
+Same location
++50
+Interest overlap (per tag)
++10
+Recent activity
++10
+Mutual connections
++15
+Same streak/location history
++5
+Scoring Formula
+score = 
+  (same_location ? 50 : 0)
++ (interest_overlap_count * 10)
++ (recent_activity ? 10 : 0)
++ (mutuals * 15)
++ (shared_location_history ? 5 : 0)
+Filter Rules
+❌ Blocked users → exclude
+❌ Already friends → exclude
+❌ Opted out of discovery → exclude
+Output
+Top N users (e.g. 10)
+Recalculate every few minutes or on room entry
+⚠️ Never expose the score to users.
+4️⃣ FEED RANKING ALGORITHM (LOCAL-FIRST)
+Your feed is NOT global like TikTok.
+Feed Sources (Priority Order)
+Current location posts
+Nearby location posts
+Interest-matched posts
+Friends’ posts
+Ranking Factors
+Factor
+Effect
+Same location
+Strong boost
+Freshness
+High
+Interest match
+Medium
+Engagement (likes, comments)
+Medium
+Friend relationship
+Medium
+Simple Ranking Formula
+rank_score =
+  location_weight
++ freshness_weight
++ interest_weight
++ engagement_weight
+Freshness decay example:
+freshness_weight = max(0, 24 - hours_since_post)
+Simple, predictable, debuggable.
+5️⃣ EPHEMERAL CONTENT EXPIRY ALGORITHM
+Goal: Content disappears without manual cleanup.
+Data Model
+post_id
+created_at
+expires_at
+visibility_type
+Algorithm
+IF now > expires_at:
+    hide post from feeds
+    mark as expired
+Cleanup
+Soft delete first
+Hard delete via scheduled job (daily)
+⚠️ Never delete immediately — allow recovery.
+6️⃣ STREAK CALCULATION ALGORITHM
+Goal: Reward consistent presence.
+Example: Location Streak
+IF user posted in location today:
+    IF last_post_date == yesterday:
+        streak += 1
+    ELSE:
+        streak = 1
+Rules
+One post per day counts
+Late-night grace window (e.g. until 3am)
+Streak breaks if no activity
+Streaks are psychological glue.
+🧠 WHAT YOU SHOULD NOT BUILD YET
+❌ ML recommendations❌ Real-time global ranking❌ Graph neural networks❌ Continuous tracking
+All of that comes after density.
+⚙️ WHERE THESE ALGORITHMS LIVE (TECH-WISE)
+Algorithm
+Where
+Location assignment
+Backend API
+Presence
+Redis
+Suggestions
+Background job
+Feed ranking
+Query + cache
+Expiry
+Scheduled task
+Streaks
+Background job
+🎯 WHY THIS WORKS
+Deterministic → easy to debug
+Predictable → users trust it
+Cheap → no heavy compute
+Scalable → precompute + cache
+This is how Instagram, Snapchat, LinkedIn started internally.
+🏁 Final Truth
+Algorithms don’t make your app smart.Constraints do.
+Your constraints:
+location
+time
+consent
+context
+That’s why this works.
+If you want next, I can:
+write pseudo-code in Django
+design Redis keys
+or simulate 10k users load behavior
+Just point the direction 🚀

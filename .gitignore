@@ -1,0 +1,29 @@
+# Python
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Django
+db.sqlite3
+staticfiles/
+media/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+*.log
+*.pot
+
+# Flutter (in latent_frontend)
+latent_frontend/build/
+latent_frontend/.dart_tool/
