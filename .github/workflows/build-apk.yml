@@ -1,0 +1,44 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: 'stable'
+
+      - name: Get dependencies
+        run: |
+          cd latent_frontend
+          flutter pub get
+
+      - name: Build APK
+        run: |
+          cd latent_frontend
+          flutter build apk --release \
+            --dart-define=API_BASE_URL=http://98.93.41.22:8000/api \
+            --dart-define=MEDIA_BASE_URL=http://98.93.41.22:8000 \
+            --android-skip-build-dependency-validation
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: latent_frontend/build/app/outputs/flutter-apk/app-release.apk

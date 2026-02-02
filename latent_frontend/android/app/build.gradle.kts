@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.latent_frontend"
-    compileSdk = 34
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
