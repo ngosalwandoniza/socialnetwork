@@ -11,7 +11,8 @@ from .views import (
     InviteContributorView, ContributeToPostView, CollaborativePostsView, PostContributorsView,
     RegisterDeviceView, PendingConnectionsView, NotificationListView, MarkNotificationReadView,
     GenerateRecoveryCodesView, InitiateRecoveryView, GuardianApprovalView, ResetPasswordRecoveryView,
-    ManageGuardiansView, PendingGuardianRequestsView
+    ManageGuardiansView, PendingGuardianRequestsView,
+    LeaderboardView, TrendingLocallyView, LikeCommentView
 )
 
 urlpatterns = [
@@ -39,6 +40,7 @@ urlpatterns = [
     path('posts/<int:pk>/like/', LikePostView.as_view(), name='like_post'),
     path('posts/<int:pk>/comment/', CommentPostView.as_view(), name='comment_post'),
     path('posts/<int:pk>/comments/', CommentListView.as_view(), name='post_comments'),
+    path('comments/<int:pk>/like/', LikeCommentView.as_view(), name='like_comment'),
     path('streaks/', UserStreaksView.as_view(), name='user_streaks'),
     
     # Discovery
@@ -46,6 +48,8 @@ urlpatterns = [
     path('location/', UpdateLocationView.as_view(), name='update_location'),
     path('interests/', InterestsListView.as_view(), name='interests_list'),
     path('interests/update/', UpdateInterestsView.as_view(), name='update_interests'),
+    path('leaderboard/', LeaderboardView.as_view(), name='leaderboard'),
+    path('trending-locally/', TrendingLocallyView.as_view(), name='trending_locally'),
     
     # Connections
     path('connections/', ConnectionListView.as_view(), name='connections_list'),

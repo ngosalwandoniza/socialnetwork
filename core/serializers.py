@@ -20,6 +20,7 @@ class ProfileSerializer(serializers.ModelSerializer):
     posts_count = serializers.IntegerField(read_only=True)
     connections_count = serializers.IntegerField(read_only=True)
     social_gravity = serializers.FloatField(read_only=True)
+    streak_count = serializers.SerializerMethodField()
     latest_post = serializers.SerializerMethodField()
 
     class Meta:
@@ -29,7 +30,7 @@ class ProfileSerializer(serializers.ModelSerializer):
             'interests', 'interest_ids', 'is_discovery_on', 'current_location',
             'mutual_connections_count', 'shared_room_name', 'connection_status',
             'posts_count', 'connections_count', 'social_gravity', 'fcm_token',
-            'latest_post'
+            'streak_count', 'latest_post'
         ]
 
     def get_connection_status(self, obj):
@@ -43,6 +44,17 @@ class ProfileSerializer(serializers.ModelSerializer):
         ).first()
         
         return connection.status if connection else 'NONE'
+
+    def get_streak_count(self, obj):
+        if obj.current_location:
+            streak = Streak.objects.filter(user=obj, location=obj.current_location).first()
+            if streak:
+                # Basic check: is the streak still "active" (last post was today or yesterday)?
+                today = timezone.now().date()
+                yesterday = today - timezone.timedelta(days=1)
+                if streak.last_post_date >= yesterday:
+                    return streak.count
+        return 0
 
     def get_latest_post(self, obj):
         latest = Post.objects.filter(author=obj).order_by('-created_at').first()
@@ -104,7 +116,7 @@ class PostSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = [
-            'id', 'author', 'author_name', 'author_pic', 'content_text', 'image', 'video', 
+            'id', 'author', 'author_name', 'author_pic', 'content_text', 'image', 'video', 'thumbnail',
             'location', 'contributors', 'created_at', 'expires_at', 'likes_count', 'comments_count',
             'post_type', 'is_collaborative'
         ]
@@ -134,10 +146,19 @@ class LikeSerializer(serializers.ModelSerializer):
 class CommentSerializer(serializers.ModelSerializer):
     author_name = serializers.ReadOnlyField(source='user.username')
     author_pic = serializers.ImageField(source='user.profile_picture', read_only=True)
+    replies_count = serializers.IntegerField(source='replies.count', read_only=True)
+    likes_count = serializers.IntegerField(source='likes.count', read_only=True)
+    is_liked = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
-        fields = ['id', 'user', 'author_name', 'author_pic', 'post', 'content', 'created_at']
+        fields = ['id', 'user', 'author_name', 'author_pic', 'post', 'parent', 'content', 'created_at', 'replies_count', 'likes_count', 'is_liked']
+
+    def get_is_liked(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.likes.filter(id=request.user.profile.id).exists()
+        return False
 
 class StreakSerializer(serializers.ModelSerializer):
     location_name = serializers.ReadOnlyField(source='location.name')
@@ -167,7 +188,7 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ChatMessage
-        fields = ['id', 'sender', 'sender_name', 'receiver', 'receiver_name', 'content', 'timestamp', 'is_read', 'expires_at']
+        fields = ['id', 'sender', 'sender_name', 'receiver', 'receiver_name', 'content', 'image', 'video', 'timestamp', 'is_read', 'expires_at']
 
 
 class NotificationSerializer(serializers.ModelSerializer):

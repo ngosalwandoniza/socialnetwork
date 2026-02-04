@@ -67,12 +67,14 @@ class Profile(models.Model):
 
 class LocationRoom(models.Model):
     name = models.CharField(max_length=100)
+    city = models.CharField(max_length=100, null=True, blank=True)
+    region = models.CharField(max_length=100, null=True, blank=True) # e.g. Copperbelt, Lusaka
     latitude = models.FloatField()
     longitude = models.FloatField()
     radius_meters = models.FloatField(default=100) # Geofence size
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.city or 'No City'}, {self.region or 'No Region'})"
 
 class Post(models.Model):
     POST_TYPE_CHOICES = [
@@ -84,6 +86,7 @@ class Post(models.Model):
     content_text = models.TextField(blank=True, validators=[MinLengthValidator(0)])
     image = models.ImageField(upload_to='posts/', null=True, blank=True)
     video = models.FileField(upload_to='posts/videos/', null=True, blank=True)
+    thumbnail = models.ImageField(upload_to='posts/thumbnails/', null=True, blank=True)
     location = models.ForeignKey(LocationRoom, on_delete=models.SET_NULL, null=True, blank=True)
     contributors = models.ManyToManyField(Profile, blank=True, related_name='collaborative_posts')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -118,7 +121,9 @@ class Like(models.Model):
 class Comment(models.Model):
     user = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='comments')
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='replies')
     content = models.TextField()
+    likes = models.ManyToManyField(Profile, blank=True, related_name='liked_comments')
     created_at = models.DateTimeField(auto_now_add=True)
 
 class Streak(models.Model):
@@ -151,7 +156,9 @@ class Connection(models.Model):
 class ChatMessage(models.Model):
     sender = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='sent_messages')
     receiver = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='received_messages')
-    content = models.TextField()
+    content = models.TextField(blank=True)
+    image = models.ImageField(upload_to='chat_images/', null=True, blank=True)
+    video = models.FileField(upload_to='chat_videos/', null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
     expires_at = models.DateTimeField(null=True, blank=True)

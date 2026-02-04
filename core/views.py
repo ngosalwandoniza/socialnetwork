@@ -63,10 +63,20 @@ class UpdateProfileView(views.APIView):
 
 class FeedView(views.APIView):
     def get(self, request):
+        page = int(request.query_params.get('page', 1))
+        page_size = 20
+        start = (page - 1) * page_size
+        end = start + page_size
+        
         profile = request.user.profile
-        posts = FeedService.get_local_feed(profile)
-        serializer = PostSerializer(posts, many=True, context={'request': request})
-        return response.Response(serializer.data)
+        posts = FeedService.get_local_feed(user_profile=profile, limit=100) # Get a larger pool for ranking
+        
+        paginated_posts = posts[start:end]
+        serializer = PostSerializer(paginated_posts, many=True, context={'request': request})
+        return response.Response({
+            'results': serializer.data,
+            'has_next': len(posts) > end
+        })
 
 
 class TrendingFeedView(views.APIView):
@@ -115,12 +125,32 @@ class CommentPostView(views.APIView):
             post = Post.objects.get(pk=pk)
             profile = request.user.profile
             content = request.data.get('content', '')
+            parent_id = request.data.get('parent_id')
             
             if not content:
                 return response.Response({"error": "Comment content required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            parent = None
+            if parent_id:
+                try:
+                    parent = Comment.objects.get(pk=parent_id, post=post)
+                except Comment.DoesNotExist:
+                    return response.Response({"error": "Parent comment not found"}, status=status.HTTP_404_NOT_FOUND)
                 
-            comment = Comment.objects.create(user=profile, post=post, content=content)
-            serializer = CommentSerializer(comment)
+            comment = Comment.objects.create(user=profile, post=post, content=content, parent=parent)
+            
+            # Notify post author or parent comment author
+            recipient = parent.user if parent else post.author
+            if recipient != profile:
+                Notification.objects.create(
+                    recipient=recipient,
+                    sender=profile,
+                    notification_type='COMMENT',
+                    title='New interaction' if parent else 'New Comment',
+                    body=f'{profile.username} replied to your comment' if parent else f'{profile.username} commented on your post'
+                )
+
+            serializer = CommentSerializer(comment, context={'request': request})
             return response.Response(serializer.data, status=status.HTTP_201_CREATED)
         except Post.DoesNotExist:
             return response.Response({"error": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -130,11 +160,27 @@ class CommentListView(views.APIView):
     def get(self, request, pk):
         try:
             post = Post.objects.get(pk=pk)
+            # Only get top-level comments; replies can be fetched or included
+            # For simplicity, let's include all and let the frontend thread them
             comments = post.comments.all().order_by('-created_at')
-            serializer = CommentSerializer(comments, many=True)
+            serializer = CommentSerializer(comments, many=True, context={'request': request})
             return response.Response(serializer.data)
         except Post.DoesNotExist:
             return response.Response({"error": "Post not found"}, status=status.HTTP_404_NOT_FOUND)
+
+class LikeCommentView(views.APIView):
+    def post(self, request, pk):
+        try:
+            comment = Comment.objects.get(pk=pk)
+            profile = request.user.profile
+            if comment.likes.filter(id=profile.id).exists():
+                comment.likes.remove(profile)
+                return response.Response({"message": "Comment unliked", "liked": False})
+            else:
+                comment.likes.add(profile)
+                return response.Response({"message": "Comment liked", "liked": True})
+        except Comment.DoesNotExist:
+            return response.Response({"error": "Comment not found"}, status=status.HTTP_404_NOT_FOUND)
 
 
 class UserStreaksView(views.APIView):
@@ -163,31 +209,22 @@ class UserPostsView(views.APIView):
 
 class SuggestedPeopleView(views.APIView):
     def get(self, request):
+        page = int(request.query_params.get('page', 1))
+        page_size = 15
+        start = (page - 1) * page_size
+        end = start + page_size
+        
         profile = request.user.profile
-        suggestions = MatchService.get_suggested_people(profile)
+        suggestions = MatchService.get_suggested_people(user_profile=profile, limit=60)
         
-        # Get user's current connections for mutual connection calculation
-        user_connections = set(Connection.objects.filter(
-            Q(sender=profile, status='CONNECTED') | Q(receiver=profile, status='CONNECTED')
-        ).values_list('sender_id', 'receiver_id'))
-        user_friend_ids = {sid if sid != profile.id else rid for sid, rid in user_connections}
+        paginated_suggestions = suggestions[start:end]
         
-        for cand in suggestions:
-            # Mutuals
-            cand_connections = set(Connection.objects.filter(
-                Q(sender=cand, status='CONNECTED') | Q(receiver=cand, status='CONNECTED')
-            ).values_list('sender_id', 'receiver_id'))
-            cand_friend_ids = {sid if sid != cand.id else rid for sid, rid in cand_connections}
-            cand.mutual_connections_count = len(user_friend_ids.intersection(cand_friend_ids))
-            
-            # Shared Room
-            if profile.current_location and cand.current_location == profile.current_location:
-                cand.shared_room_name = profile.current_location.name
-            else:
-                cand.shared_room_name = None
-                
-        serializer = ProfileSerializer(suggestions, many=True, context={'request': request})
-        return response.Response(serializer.data)
+        # Connection status is handled by Serializer context
+        serializer = ProfileSerializer(paginated_suggestions, many=True, context={'request': request})
+        return response.Response({
+            'results': serializer.data,
+            'has_next': len(suggestions) > end
+        })
 
 
 class DisconnectView(views.APIView):
@@ -322,25 +359,25 @@ class ConversationListView(views.APIView):
     def get(self, request):
         profile = request.user.profile
         
-        # Get all unique conversation partners
-        sent_to = ChatMessage.objects.filter(sender=profile).values('receiver').annotate(last_msg=Max('timestamp'))
-        received_from = ChatMessage.objects.filter(receiver=profile).values('sender').annotate(last_msg=Max('timestamp'))
+        # Get unique partner IDs from messages
+        sent_partners = ChatMessage.objects.filter(sender=profile).values_list('receiver_id', flat=True).distinct()
+        received_partners = ChatMessage.objects.filter(receiver=profile).values_list('sender_id', flat=True).distinct()
+        partner_ids = set(sent_partners) | set(received_partners)
         
-        # Combine and get unique users
-        partner_ids = set()
+        if not partner_ids:
+            return response.Response([])
+
+        # Fetch all partner profiles and pre-calculate last message and unread count
+        partners = Profile.objects.filter(id__in=partner_ids)
         conversations = []
         
-        for msg in sent_to:
-            partner_ids.add(msg['receiver'])
-        for msg in received_from:
-            partner_ids.add(msg['sender'])
-        
-        for partner_id in partner_ids:
-            partner = Profile.objects.get(pk=partner_id)
+        for partner in partners:
+            # Last message for this specific pair
             last_message = ChatMessage.objects.filter(
                 Q(sender=profile, receiver=partner) | Q(sender=partner, receiver=profile)
             ).order_by('-timestamp').first()
             
+            # Unread count from this partner to the current user
             unread_count = ChatMessage.objects.filter(
                 sender=partner, receiver=profile, is_read=False
             ).count()
@@ -355,7 +392,7 @@ class ConversationListView(views.APIView):
             })
         
         # Sort by last message timestamp
-        conversations.sort(key=lambda x: x['last_timestamp'] or '', reverse=True)
+        conversations.sort(key=lambda x: x['last_timestamp'] or timezone.now() - timedelta(days=365), reverse=True)
         return response.Response(conversations)
 
 
@@ -845,3 +882,42 @@ class PendingGuardianRequestsView(views.APIView):
             "token": r.token,
             "expires_at": r.expires_at
         } for r in pending])
+
+class LeaderboardView(views.APIView):
+    def get(self, request):
+        """Top 10 users ranked by social gravity."""
+        # Note: In a large app, you'd cache this or pre-calculate it.
+        # But for beta, we calculate it on the fly.
+        profiles = sorted(
+            Profile.objects.all(), 
+            key=lambda p: p.social_gravity, 
+            reverse=True
+        )[:10]
+        serializer = ProfileSerializer(profiles, many=True, context={'request': request})
+        return response.Response(serializer.data)
+
+class TrendingLocallyView(views.APIView):
+    def get(self, request):
+        """Hottest post in the user's region from the last 24h."""
+        profile = request.user.profile
+        now = timezone.now()
+        day_ago = now - timedelta(hours=24)
+        
+        region = profile.current_location.region if profile.current_location else None
+        
+        posts = Post.objects.filter(created_at__gt=day_ago)
+        if region:
+            posts = posts.filter(location__region=region)
+            
+        # Sort by engagement (likes + comments)
+        trending_post = sorted(
+            posts,
+            key=lambda p: p.likes.count() + p.comments.count(),
+            reverse=True
+        )[:1] # Just get the top 1
+        
+        if trending_post:
+            serializer = PostSerializer(trending_post[0], context={'request': request})
+            return response.Response(serializer.data)
+            
+        return response.Response({"message": "No trending posts found locally"}, status=status.HTTP_404_NOT_FOUND)
