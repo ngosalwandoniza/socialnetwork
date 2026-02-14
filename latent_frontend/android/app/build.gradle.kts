@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -6,7 +8,7 @@ plugins {
 }
 
 val keystorePropertiesFile = rootProject.projectDir.resolve("key.properties")
-val keystoreProperties = java.util.Properties()
+val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(keystorePropertiesFile.inputStream())
 }
@@ -30,7 +32,8 @@ android {
             if (keystoreProperties.containsKey("keyAlias")) {
                 keyAlias = keystoreProperties["keyAlias"] as String
                 keyPassword = keystoreProperties["keyPassword"] as String
-                storeFile = keystoreProperties["storeFile"]?.let { file(it) }
+                val storeFilePath = keystoreProperties["storeFile"] as String?
+                storeFile = storeFilePath?.let { file(it) }
                 storePassword = keystoreProperties["storePassword"] as String
             } else {
                 // Fallback for CI/CD environments like GitHub Actions
