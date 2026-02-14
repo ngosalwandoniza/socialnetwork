@@ -73,7 +73,7 @@ class NotificationProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    stopPolling();
     super.dispose();
   }
 }

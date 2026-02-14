@@ -13,6 +13,14 @@ class ChatProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   int? _currentChatUserId;
+
+  List<Map<String, dynamic>> get conversations => _conversations;
+  List<Map<String, dynamic>> get currentMessages => _currentMessages;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+  int get totalUnreadCount => _conversations.fold<int>(
+    0, (sum, c) => sum + ((c['unread_count'] as int?) ?? 0),
+  );
   void startPolling() {
     SyncService().register(pollUpdate);
   }
@@ -167,7 +175,7 @@ class ChatProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    stopPolling();
     super.dispose();
   }
 }
