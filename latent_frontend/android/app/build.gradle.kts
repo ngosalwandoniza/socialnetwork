@@ -27,10 +27,19 @@ android {
 
     signingConfigs {
         create("release") {
-            keyAlias = keystoreProperties["keyAlias"] as String
-            keyPassword = keystoreProperties["keyPassword"] as String
-            storeFile = keystoreProperties["storeFile"]?.let { file(it) }
-            storePassword = keystoreProperties["storePassword"] as String
+            if (keystoreProperties.containsKey("keyAlias")) {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = keystoreProperties["storeFile"]?.let { file(it) }
+                storePassword = keystoreProperties["storePassword"] as String
+            } else {
+                // Fallback for CI/CD environments like GitHub Actions
+                val debugConfig = getByName("debug")
+                keyAlias = debugConfig.keyAlias
+                keyPassword = debugConfig.keyPassword
+                storeFile = debugConfig.storeFile
+                storePassword = debugConfig.storePassword
+            }
         }
     }
 
