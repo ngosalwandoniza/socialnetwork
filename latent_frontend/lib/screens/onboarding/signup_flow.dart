@@ -486,44 +486,48 @@ class _SignupFlowState extends State<SignupFlow> {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 40),
-          _availableInterests.isEmpty 
-            ? const Center(child: CircularProgressIndicator())
-            : Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: _availableInterests.map((interest) {
-                  final name = interest['name'];
-                  final id = interest['id'];
-                  bool isSelected = _selectedInterestIds.contains(id);
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        if (isSelected) {
-                          _selectedInterestIds.remove(id);
-                        } else if (_selectedInterestIds.length < 7) {
-                          _selectedInterestIds.add(id);
-                        }
-                      });
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: isSelected ? AppTheme.primaryViolet : AppTheme.surfaceGray,
-                        borderRadius: BorderRadius.circular(30),
-                        border: isSelected ? Border.all(color: AppTheme.primaryViolet, width: 2) : null,
-                      ),
-                      child: Text(
-                        name,
-                        style: TextStyle(
-                          color: isSelected ? Colors.white : AppTheme.textMain,
-                          fontWeight: FontWeight.w600,
+          Expanded(
+            child: SingleChildScrollView(
+              child: _availableInterests.isEmpty 
+                ? const Center(child: CircularProgressIndicator())
+                : Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: _availableInterests.map((interest) {
+                      final name = interest['name'];
+                      final id = interest['id'];
+                      bool isSelected = _selectedInterestIds.contains(id);
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (isSelected) {
+                              _selectedInterestIds.remove(id);
+                            } else if (_selectedInterestIds.length < 7) {
+                              _selectedInterestIds.add(id);
+                            }
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppTheme.primaryViolet : AppTheme.surfaceGray,
+                            borderRadius: BorderRadius.circular(30),
+                            border: isSelected ? Border.all(color: AppTheme.primaryViolet, width: 2) : null,
+                          ),
+                          child: Text(
+                            name,
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : AppTheme.textMain,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
+                      );
+                    }).toList(),
+                  ),
+            ),
+          ),
           const Spacer(),
           ElevatedButton(
             onPressed: () {

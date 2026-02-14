@@ -7,6 +7,7 @@ import 'chat_detail_screen.dart';
 import '../../services/api_service.dart';
 import '../../providers/notification_provider.dart';
 import '../main/notification_screen.dart';
+import '../main/friend_list_screen.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -165,6 +166,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     );
                   },
                 ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => const FriendListScreen()),
+          );
+        },
+        backgroundColor: AppTheme.primaryViolet,
+        child: const FaIcon(FontAwesomeIcons.userPlus, color: Colors.white, size: 20),
+      ),
     );
   }
 

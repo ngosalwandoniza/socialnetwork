@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/discovery_provider.dart';
@@ -137,6 +138,7 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DiscoveryProvider>().loadSuggestions();
+      context.read<DiscoveryProvider>().loadFriends();
     });
   }
 
@@ -211,25 +213,98 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
               child: discoveryProvider.isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : discoveryProvider.suggestions.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const FaIcon(FontAwesomeIcons.userGroup, size: 48, color: AppTheme.textSecondary),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No one nearby yet',
-                                style: Theme.of(context).textTheme.titleLarge,
+                      ? discoveryProvider.friends.isNotEmpty
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 20),
+                                  child: Text(
+                                    'Nobody nearby, but here are your friends:',
+                                    style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: ListView.builder(
+                                    itemCount: discoveryProvider.friends.length,
+                                    itemBuilder: (context, index) {
+                                      final conn = discoveryProvider.friends[index];
+                                      final authProvider = context.read<AuthProvider>();
+                                      final myId = authProvider.currentUser?['id'];
+                                      
+                                      // Extract the other profile from the connection
+                                      final profile = conn['sender'] == myId ? {
+                                        'id': conn['receiver'],
+                                        'username': conn['receiver_name'],
+                                        'profile_picture': conn['receiver_pic'],
+                                        'connection_status': 'CONNECTED',
+                                      } : {
+                                        'id': conn['sender'],
+                                        'username': conn['sender_name'],
+                                        'profile_picture': conn['sender_pic'],
+                                        'connection_status': 'CONNECTED',
+                                      };
+
+                                      return ListTile(
+                                        leading: CircleAvatar(
+                                          backgroundColor: AppTheme.surfaceGray,
+                                          backgroundImage: profile['profile_picture'] != null 
+                                              ? NetworkImage(ApiService.getMediaUrl(profile['profile_picture'])!) 
+                                              : null,
+                                          child: profile['profile_picture'] == null 
+                                              ? const FaIcon(FontAwesomeIcons.user, size: 16) 
+                                              : null,
+                                        ),
+                                        title: Text(profile['username'] ?? 'Friend', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        subtitle: const Text('Connected'),
+                                        trailing: IconButton(
+                                          icon: const FaIcon(FontAwesomeIcons.solidCommentDots, size: 18, color: AppTheme.primaryViolet),
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => ChatDetailScreen(
+                                                  userId: profile['id'],
+                                                  userName: profile['username'],
+                                                  userProfilePicture: profile['profile_picture'],
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        onTap: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => ProfileDetailScreen(profile: profile),
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const FaIcon(FontAwesomeIcons.userGroup, size: 48, color: AppTheme.textSecondary),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No one nearby yet',
+                                    style: Theme.of(context).textTheme.titleLarge,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Move to a different location or check back later',
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Move to a different location or check back later',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        )
+                            )
                       : GridView.builder(
                           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,

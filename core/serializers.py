@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.db.models import Q
+from django.utils import timezone
 from .models import Profile, Interest, LocationRoom, Post, Connection, ChatMessage, Like, Comment, Streak, Notification
 
 class InterestSerializer(serializers.ModelSerializer):

@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/chat_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
+import '../../utils/media_helper.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final int userId;
@@ -25,12 +29,17 @@ class ChatDetailScreen extends StatefulWidget {
 class _ChatDetailScreenState extends State<ChatDetailScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  File? _selectedImage;
+  File? _selectedVideo;
+  bool _isSending = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().loadMessages(widget.userId);
+      final chatProvider = context.read<ChatProvider>();
+      chatProvider.loadMessages(widget.userId);
+      // currentChatUserId is set by loadMessages
     });
   }
 
@@ -38,20 +47,72 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    // Clear current chat so polling doesn't keep fetching these messages
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+         context.read<ChatProvider>().clearCurrentChat();
+      }
+    });
     super.dispose();
+  }
+
+  Future<void> _pickMedia(ImageSource source, bool isVideo) async {
+    final picker = ImagePicker();
+    final pickedFile = isVideo 
+      ? await picker.pickVideo(source: source)
+      : await picker.pickImage(source: source);
+    
+    if (pickedFile != null) {
+      setState(() {
+        if (isVideo) {
+          _selectedVideo = File(pickedFile.path);
+          _selectedImage = null;
+        } else {
+          _selectedImage = File(pickedFile.path);
+          _selectedVideo = null;
+        }
+      });
+    }
   }
 
   void _sendMessage() async {
     final content = _messageController.text.trim();
-    if (content.isEmpty) return;
+    if (content.isEmpty && _selectedImage == null && _selectedVideo == null) return;
+    
+    setState(() => _isSending = true);
+    
+    final image = _selectedImage;
+    final video = _selectedVideo;
     
     _messageController.clear();
-    await context.read<ChatProvider>().sendMessage(widget.userId, content);
+    setState(() {
+      _selectedImage = null;
+      _selectedVideo = null;
+    });
+
+    // Optimistic UI: Add a placeholder message locally via provider
+    final authProvider = context.read<AuthProvider>();
+    final currentUserId = authProvider.currentUser?['id'];
+    
+    // Pass a temporary id or timestamp to track it
+    final tempId = DateTime.now().millisecondsSinceEpoch;
+    
+    // We add it to the provider's local list first (I'll need to add a method for this or update sendMessage)
+    // For now, let's update ChatProvider.sendMessage to handle the optimistic part
+    await context.read<ChatProvider>().sendMessage(
+      widget.userId, 
+      content: content.isNotEmpty ? content : null,
+      image: image,
+      video: video,
+      isOptimistic: true, // We'll add this flag
+    );
+
+    setState(() => _isSending = false);
     
     // Scroll to bottom
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent + 100,
+        _scrollController.position.maxScrollExtent + 200,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
@@ -73,7 +134,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               radius: 16,
               backgroundColor: AppTheme.surfaceGray,
               backgroundImage: widget.userProfilePicture != null 
-                  ? NetworkImage(ApiService.getMediaUrl(widget.userProfilePicture!)!) 
+                  ? CachedNetworkImageProvider(ApiService.getMediaUrl(widget.userProfilePicture!)!) 
                   : null,
               child: widget.userProfilePicture == null 
                   ? const FaIcon(FontAwesomeIcons.user, size: 14, color: AppTheme.primaryViolet) 
@@ -121,7 +182,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                         itemBuilder: (context, index) {
                           final message = messages[index];
                           final isMe = message['sender'] == currentUserId;
-                          return _buildMessageBubble(message['content'] ?? '', isMe, message['timestamp']);
+                          return _buildMessageBubble(
+                            message['content'], 
+                            isMe, 
+                            message['timestamp'],
+                            image: message['image'],
+                            video: message['video'],
+                            isSending: message['is_sending'] ?? false,
+                          );
                         },
                       ),
           ),
@@ -131,7 +199,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  Widget _buildMessageBubble(String text, bool isMe, String? timestamp) {
+  Widget _buildMessageBubble(String? text, bool isMe, String? timestamp, {String? image, String? video, bool isSending = false}) {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -149,20 +217,58 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ),
         child: Column(
           crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              text,
-              style: TextStyle(color: isMe ? Colors.white : AppTheme.textMain),
-            ),
+            if (image != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: image.startsWith('/') // Local path
+                    ? Image.file(File(image), height: 200, width: double.infinity, fit: BoxFit.cover)
+                    : CachedNetworkImage(
+                        imageUrl: ApiService.getMediaUrl(image)!,
+                        placeholder: (context, url) => const SizedBox(height: 200, width: double.infinity, child: Center(child: CircularProgressIndicator())),
+                        errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
+                        fit: BoxFit.cover,
+                      ),
+                ),
+              ),
+            if (video != null)
+              const Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FaIcon(FontAwesomeIcons.video, size: 16, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text('Video attached', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.white70)),
+                  ],
+                ),
+              ),
+            if (text != null && text.isNotEmpty)
+              Text(
+                text,
+                style: TextStyle(color: isMe ? Colors.white : AppTheme.textMain),
+              ),
             if (timestamp != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  _formatTime(timestamp),
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: isMe ? Colors.white.withAlpha(180) : AppTheme.textSecondary,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _formatTime(timestamp),
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isMe ? Colors.white.withAlpha(180) : AppTheme.textSecondary,
+                      ),
+                    ),
+                    if (isMe && isSending) ...[
+                      const SizedBox(width: 4),
+                      const FaIcon(FontAwesomeIcons.clock, size: 8, color: Colors.white70),
+                    ],
+                  ],
                 ),
               ),
           ],
@@ -181,40 +287,121 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   Widget _buildMessageInput() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 10, offset: const Offset(0, -2)),
-        ],
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            const FaIcon(FontAwesomeIcons.circlePlus, color: AppTheme.textSecondary, size: 24),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextFormField(
-                controller: _messageController,
-                textInputAction: TextInputAction.send,
-                onFieldSubmitted: (_) => _sendMessage(),
-                decoration: InputDecoration(
-                  hintText: 'Type a message...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  fillColor: AppTheme.surfaceGray,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_selectedImage != null || _selectedVideo != null)
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: AppTheme.surfaceGray.withAlpha(100),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: _selectedImage != null 
+                    ? Image.file(_selectedImage!, height: 60, width: 60, fit: BoxFit.cover)
+                    : Container(
+                        height: 60, width: 60, 
+                        color: AppTheme.primaryViolet, 
+                        child: const Center(child: FaIcon(FontAwesomeIcons.video, color: Colors.white))
+                      ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _selectedImage != null ? 'Image selected' : 'Video selected',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                ),
+                IconButton(
+                  icon: const FaIcon(FontAwesomeIcons.circleXmark, size: 20, color: AppTheme.textSecondary),
+                  onPressed: () => setState(() {
+                    _selectedImage = null;
+                    _selectedVideo = null;
+                  }),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: _sendMessage,
-              child: const FaIcon(FontAwesomeIcons.solidPaperPlane, color: AppTheme.primaryViolet, size: 22),
+          ),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 10, offset: const Offset(0, -2)),
+            ],
+          ),
+          child: SafeArea(
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const FaIcon(FontAwesomeIcons.circlePlus, color: AppTheme.primaryViolet, size: 24),
+                  onPressed: _showMediaPicker,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _messageController,
+                    textInputAction: TextInputAction.send,
+                    onFieldSubmitted: (_) => _sendMessage(),
+                    decoration: InputDecoration(
+                      hintText: 'Type a message...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: AppTheme.surfaceGray,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _isSending 
+                  ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                  : GestureDetector(
+                      onTap: _sendMessage,
+                      child: const FaIcon(FontAwesomeIcons.solidPaperPlane, color: AppTheme.primaryViolet, size: 22),
+                    ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showMediaPicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const FaIcon(FontAwesomeIcons.image, color: AppTheme.primaryViolet),
+              title: const Text('Send Image'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickMedia(ImageSource.gallery, false);
+              },
+            ),
+            ListTile(
+              leading: const FaIcon(FontAwesomeIcons.video, color: AppTheme.primaryViolet),
+              title: const Text('Send Video'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickMedia(ImageSource.gallery, true);
+              },
+            ),
+            ListTile(
+              leading: const FaIcon(FontAwesomeIcons.camera, color: AppTheme.primaryViolet),
+              title: const Text('Take Photo'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickMedia(ImageSource.camera, false);
+              },
             ),
           ],
         ),

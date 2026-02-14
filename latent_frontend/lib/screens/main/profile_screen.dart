@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../onboarding/landing_page.dart';
@@ -12,6 +13,7 @@ import '../post/post_detail_screen.dart';
 import 'friend_list_screen.dart';
 import '../../providers/notification_provider.dart';
 import 'notification_screen.dart';
+import '../../widgets/social_widgets.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -96,7 +98,7 @@ class ProfileScreen extends StatelessWidget {
                       radius: 50,
                       backgroundColor: AppTheme.surfaceGray,
                       backgroundImage: user?['profile_picture'] != null
-                          ? NetworkImage(ApiService.getMediaUrl(user!['profile_picture'])!)
+                          ? CachedNetworkImageProvider(ApiService.getMediaUrl(user!['profile_picture'])!)
                           : null,
                       child: user?['profile_picture'] == null
                           ? const FaIcon(FontAwesomeIcons.user, size: 40, color: AppTheme.primaryViolet)
@@ -117,12 +119,10 @@ class ProfileScreen extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  'Social Gravity: ${user?['social_gravity'] ?? '1.0'}',
-                  style: const TextStyle(color: AppTheme.primaryViolet, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 4),
-                const FaIcon(FontAwesomeIcons.fire, size: 14, color: Colors.orange),
+                SocialBadge(gravity: (user?['social_gravity'] ?? 1.0).toDouble()),
+                const SizedBox(width: 8),
+                if ((user?['streak_count'] ?? 0) > 0)
+                  StreakBadge(count: user?['streak_count']),
               ],
             ),
             const SizedBox(height: 16),
@@ -247,6 +247,8 @@ class ProfileScreen extends StatelessWidget {
                         itemCount: snapshot.data!.length,
                         itemBuilder: (context, index) {
                           final post = snapshot.data![index];
+                          final String? imageUrl = post['thumbnail'] ?? post['image'];
+                          
                           return GestureDetector(
                             onTap: () {
                               if (post['is_collaborative'] == true) {
@@ -273,13 +275,19 @@ class ProfileScreen extends StatelessWidget {
                                     width: double.infinity,
                                     height: double.infinity,
                                     color: AppTheme.surfaceGray,
-                                    child: post['image'] != null
-                                        ? Image.network(
-                                            ApiService.getMediaUrl(post['image'])!,
+                                    child: imageUrl != null
+                                        ? CachedNetworkImage(
+                                            imageUrl: ApiService.getMediaUrl(imageUrl)!,
                                             fit: BoxFit.cover,
+                                            placeholder: (context, url) => Container(color: Colors.grey[200]),
+                                            errorWidget: (_, __, ___) => const Center(child: FaIcon(FontAwesomeIcons.image, color: Colors.white30)),
                                           )
                                         : Center(child: FaIcon(post['video'] != null ? FontAwesomeIcons.video : FontAwesomeIcons.pencil, size: 20, color: AppTheme.textSecondary)),
                                   ),
+                                  if (post['video'] != null)
+                                    const Center(
+                                      child: FaIcon(FontAwesomeIcons.play, color: Colors.white, size: 24),
+                                    ),
                                   if (post['post_type'] == 'PERSISTENT')
                                     Positioned(
                                       top: 4,
@@ -355,13 +363,19 @@ class ProfileScreen extends StatelessWidget {
                                     width: double.infinity,
                                     height: double.infinity,
                                     color: AppTheme.surfaceGray,
-                                    child: post['image'] != null
-                                        ? Image.network(
-                                            ApiService.getMediaUrl(post['image'])!,
+                                    child: (post['thumbnail'] ?? post['image']) != null
+                                        ? CachedNetworkImage(
+                                            imageUrl: ApiService.getMediaUrl(post['thumbnail'] ?? post['image'])!,
                                             fit: BoxFit.cover,
+                                            placeholder: (context, url) => Container(color: Colors.grey[200]),
+                                            errorWidget: (_, __, ___) => const Center(child: FaIcon(FontAwesomeIcons.image, color: Colors.white30)),
                                           )
                                         : Center(child: FaIcon(post['video'] != null ? FontAwesomeIcons.video : FontAwesomeIcons.pencil, size: 20, color: AppTheme.textSecondary)),
                                   ),
+                                  if (post['video'] != null)
+                                    const Center(
+                                      child: FaIcon(FontAwesomeIcons.play, color: Colors.white, size: 24),
+                                    ),
                                   Positioned(
                                     bottom: 4,
                                     right: 4,

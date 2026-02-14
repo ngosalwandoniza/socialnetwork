@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite/sqflite.dart';
 import 'theme/app_theme.dart';
 import 'screens/onboarding/landing_page.dart';
 import 'screens/main/discovery_grid.dart';
@@ -11,6 +14,10 @@ import 'providers/connection_provider.dart';
 import 'providers/notification_provider.dart';
 
 void main() {
+  if (Platform.isWindows || Platform.isLinux) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
   runApp(
     MultiProvider(
       providers: [

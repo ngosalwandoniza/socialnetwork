@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/api_service.dart';
 
@@ -6,11 +7,38 @@ class ConnectionProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _pendingConnections = [];
   bool _isLoading = false;
   String? _error;
+  Timer? _pollTimer;
 
   List<Map<String, dynamic>> get connections => _connections;
   List<Map<String, dynamic>> get pendingConnections => _pendingConnections;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  void startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+      _pollUpdate();
+    });
+  }
+
+  void stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  Future<void> _pollUpdate() async {
+    try {
+      final data = await ApiService.getPendingConnections();
+      final newPending = List<Map<String, dynamic>>.from(data);
+      
+      if (newPending.length != _pendingConnections.length) {
+        _pendingConnections = newPending;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Connection polling error: $e");
+    }
+  }
 
   Future<void> loadConnections() async {
     _isLoading = true;
@@ -49,7 +77,6 @@ class ConnectionProvider extends ChangeNotifier {
   Future<void> acceptRequest(int connectionId) async {
     try {
       await ApiService.acceptConnection(connectionId);
-      // Refresh both lists
       await loadPendingConnections();
       await loadConnections();
     } catch (e) {
@@ -61,7 +88,6 @@ class ConnectionProvider extends ChangeNotifier {
   Future<void> rejectRequest(int connectionId) async {
     try {
       await ApiService.rejectConnection(connectionId);
-      // Refresh pending list
       await loadPendingConnections();
     } catch (e) {
       _error = e.toString();
@@ -77,5 +103,11 @@ class ConnectionProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 }

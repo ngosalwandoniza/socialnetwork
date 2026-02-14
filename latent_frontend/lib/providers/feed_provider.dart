@@ -7,11 +7,13 @@ class FeedProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isTrending = false;
   String? _error;
+  Map<String, dynamic>? _trendingLocallyPost;
   
   List<Map<String, dynamic>> get posts => _isTrending ? _trendingPosts : _posts;
   bool get isLoading => _isLoading;
   bool get isTrending => _isTrending;
   String? get error => _error;
+  Map<String, dynamic>? get trendingLocallyPost => _trendingLocallyPost;
   
   Future<void> loadFeed() async {
     _isLoading = true;
@@ -20,7 +22,7 @@ class FeedProvider extends ChangeNotifier {
     
     try {
       final data = await ApiService.getFeed();
-      _posts = List<Map<String, dynamic>>.from(data);
+      _posts = List<Map<String, dynamic>>.from(data['results'] ?? []);
       _isTrending = false;
       _isLoading = false;
       notifyListeners();
@@ -38,7 +40,7 @@ class FeedProvider extends ChangeNotifier {
     
     try {
       final data = await ApiService.getTrendingFeed();
-      _trendingPosts = List<Map<String, dynamic>>.from(data);
+      _trendingPosts = List<Map<String, dynamic>>.from(data['results'] ?? []);
       _isTrending = true;
       _isLoading = false;
       notifyListeners();
@@ -46,6 +48,16 @@ class FeedProvider extends ChangeNotifier {
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> loadTrendingLocally() async {
+    try {
+      final post = await ApiService.getTrendingLocally();
+      _trendingLocallyPost = post;
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error loading local trending: $e");
     }
   }
   
@@ -136,19 +148,29 @@ class FeedProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> addComment(int postId, String content) async {
+  Future<void> addComment(int postId, String content, {int? parentId}) async {
     try {
-      await ApiService.addComment(postId, content);
+      await ApiService.addComment(postId, content, parentId: parentId);
       // Refresh likes/comments count locally or just reload specific post if needed
       final listToUpdate = _isTrending ? _trendingPosts : _posts;
       final index = listToUpdate.indexWhere((p) => p['id'] == postId);
-      if (index != -1) {
+      if (index != -1 && parentId == null) {
         listToUpdate[index]['comments_count'] = (listToUpdate[index]['comments_count'] ?? 0) + 1;
         notifyListeners();
       }
     } catch (e) {
       _error = e.toString();
       notifyListeners();
+    }
+  }
+
+  Future<void> likeComment(int commentId) async {
+    try {
+      await ApiService.likeComment(commentId);
+      // Note: We don't have a local comments cache in FeedProvider that we can easily update here
+      // Individual screens usually call getComments() which returns a fresh list
+    } catch (e) {
+      debugPrint("Error liking comment: $e");
     }
   }
 }

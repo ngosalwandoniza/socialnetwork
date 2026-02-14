@@ -59,8 +59,7 @@ class _LandingPageState extends State<LandingPage> {
               // Logo at top
               Text(
                 'Latent',
-                style: const TextStyle(
-                  fontFamily: 'Bradley Hand ITC',
+                style: GoogleFonts.outfit(
                   fontSize: 60,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.primaryViolet,

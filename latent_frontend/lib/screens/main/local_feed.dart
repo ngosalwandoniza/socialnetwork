@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/feed_provider.dart';
@@ -381,17 +382,19 @@ class _LocalFeedState extends State<LocalFeed> with SingleTickerProviderStateMix
 
   void _showCommentsSheet(BuildContext context, Map<String, dynamic> post) {
     final TextEditingController commentController = TextEditingController();
+    int? replyingToId;
+    String? replyingToName;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (context, setModalState) {
             return Container(
               height: MediaQuery.of(context).size.height * 0.75,
               padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -403,7 +406,7 @@ class _LocalFeedState extends State<LocalFeed> with SingleTickerProviderStateMix
                   const Text('Comments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const Divider(),
                   Expanded(
-                    child: FutureBuilder<List<Map<String, dynamic>>>(
+                    child: FutureBuilder<List<dynamic>>(
                       future: context.read<FeedProvider>().getComments(post['id']),
                       builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -421,26 +424,104 @@ class _LocalFeedState extends State<LocalFeed> with SingleTickerProviderStateMix
                             ),
                           );
                         }
+
+                        // Organize comments: top-level and their replies
+                        final comments = snapshot.data!;
+
                         return ListView.builder(
-                          itemCount: snapshot.data!.length,
+                          itemCount: comments.length,
                           itemBuilder: (context, index) {
-                            final comment = snapshot.data![index];
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundImage: comment['author_pic'] != null 
-                                    ? NetworkImage(ApiService.getMediaUrl(comment['author_pic'])!) 
-                                    : null,
-                                child: comment['author_pic'] == null ? const FaIcon(FontAwesomeIcons.user, size: 14) : null,
+                            final comment = comments[index];
+                            final bool isReply = comment['parent'] != null;
+                            final bool isLiked = comment['is_liked'] ?? false;
+
+                            return Padding(
+                              padding: EdgeInsets.only(left: isReply ? 40 : 0),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  radius: isReply ? 14 : 18,
+                                  backgroundImage: comment['author_pic'] != null 
+                                      ? NetworkImage(ApiService.getMediaUrl(comment['author_pic'])!) 
+                                      : null,
+                                  child: comment['author_pic'] == null ? const FaIcon(FontAwesomeIcons.user, size: 12) : null,
+                                ),
+                                title: Row(
+                                  children: [
+                                    Text(comment['author_name'] ?? 'User', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    const SizedBox(width: 8),
+                                    Text(_formatTimestamp(comment['created_at']), style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                  ],
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(comment['content'] ?? '', style: const TextStyle(color: Colors.black87, fontSize: 14)),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        GestureDetector(
+                                          onTap: () async {
+                                            await context.read<FeedProvider>().likeComment(comment['id']);
+                                            setModalState(() {});
+                                          },
+                                          child: Text(
+                                            isLiked ? 'Liked' : 'Like',
+                                            style: TextStyle(
+                                              fontSize: 12, 
+                                              fontWeight: isLiked ? FontWeight.bold : FontWeight.normal,
+                                              color: isLiked ? AppTheme.primaryViolet : AppTheme.textSecondary
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        GestureDetector(
+                                          onTap: () {
+                                            setModalState(() {
+                                              replyingToId = comment['id'];
+                                              replyingToName = comment['author_name'];
+                                            });
+                                          },
+                                          child: const Text('Reply', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                                        ),
+                                        if ((comment['likes_count'] ?? 0) > 0) ...[
+                                          const SizedBox(width: 16),
+                                          FaIcon(FontAwesomeIcons.solidHeart, size: 10, color: Colors.red.withAlpha(200)),
+                                          const SizedBox(width: 4),
+                                          Text('${comment['likes_count']}', style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                                        ]
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                trailing: isLiked 
+                                  ? const FaIcon(FontAwesomeIcons.solidHeart, size: 14, color: Colors.red)
+                                  : const FaIcon(FontAwesomeIcons.heart, size: 14, color: Colors.grey),
                               ),
-                              title: Text(comment['author_name'] ?? 'User', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              subtitle: Text(comment['content'] ?? ''),
-                              trailing: Text(_formatTimestamp(comment['created_at']), style: const TextStyle(fontSize: 10, color: Colors.grey)),
                             );
                           },
                         );
                       },
                     ),
                   ),
+                  if (replyingToId != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      color: AppTheme.surfaceGray,
+                      child: Row(
+                        children: [
+                          Text('Replying to ', style: const TextStyle(fontSize: 12)),
+                          Text(replyingToName ?? 'User', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: () => setModalState(() {
+                              replyingToId = null;
+                              replyingToName = null;
+                            }),
+                            child: const Icon(Icons.close, size: 16),
+                          ),
+                        ],
+                      ),
+                    ),
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Row(
@@ -448,8 +529,9 @@ class _LocalFeedState extends State<LocalFeed> with SingleTickerProviderStateMix
                         Expanded(
                           child: TextField(
                             controller: commentController,
+                            autofocus: replyingToId != null,
                             decoration: InputDecoration(
-                              hintText: 'Add a comment...',
+                              hintText: replyingToId != null ? 'Reply to $replyingToName...' : 'Add a comment...',
                               filled: true,
                               fillColor: AppTheme.surfaceGray,
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
@@ -462,9 +544,17 @@ class _LocalFeedState extends State<LocalFeed> with SingleTickerProviderStateMix
                           icon: const FaIcon(FontAwesomeIcons.solidPaperPlane, color: AppTheme.primaryViolet, size: 20),
                           onPressed: () async {
                             if (commentController.text.isNotEmpty) {
-                              await context.read<FeedProvider>().addComment(post['id'], commentController.text);
+                              await context.read<FeedProvider>().addComment(
+                                post['id'], 
+                                commentController.text,
+                                parentId: replyingToId
+                              );
                               commentController.clear();
-                              setState(() {}); // Refresh local comments list
+                              setModalState(() {
+                                replyingToId = null;
+                                replyingToName = null;
+                              });
+                              setState(() {}); // Refresh parent list counts
                             }
                           },
                         ),

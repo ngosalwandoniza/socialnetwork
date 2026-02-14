@@ -5,6 +5,9 @@ import '../../services/api_service.dart';
 import '../chat/chat_detail_screen.dart';
 import '../post/post_detail_screen.dart';
 import '../post/collaborative_post_detail_screen.dart';
+import '../../providers/auth_provider.dart';
+import 'package:provider/provider.dart';
+import '../../widgets/social_widgets.dart';
 
 class ProfileDetailScreen extends StatefulWidget {
   final Map<String, dynamic> profile;
@@ -157,12 +160,10 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  'Social Gravity: $socialGravity',
-                  style: const TextStyle(color: AppTheme.primaryViolet, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 4),
-                const FaIcon(FontAwesomeIcons.circleCheck, size: 14, color: AppTheme.primaryViolet),
+                SocialBadge(gravity: (displayProfile['social_gravity'] ?? 1.0).toDouble()),
+                const SizedBox(width: 8),
+                if ((displayProfile['streak_count'] ?? 0) > 0)
+                  StreakBadge(count: displayProfile['streak_count']),
               ],
             ),
             const SizedBox(height: 16),
@@ -199,48 +200,58 @@ class _ProfileDetailScreenState extends State<ProfileDetailScreen> {
             // Action Buttons
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Row(
-                children: [
-                   if (_connectionStatus != 'CONNECTED')
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: (_connectionStatus == 'PENDING' || _isProcessing) ? null : _handleConnect,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _connectionStatus == 'PENDING' ? Colors.grey : AppTheme.primaryViolet,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(0, 50),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        ),
-                        child: _isProcessing 
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text(
-                              _connectionStatus == 'PENDING' ? 'Pending' : 'Connect', 
-                              style: const TextStyle(fontWeight: FontWeight.bold)
+              child: Consumer<AuthProvider>(
+                builder: (context, authProvider, child) {
+                  final isSelf = authProvider.currentUser != null && authProvider.currentUser!['id'] == widget.profile['id'];
+                  
+                  if (isSelf) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return Row(
+                    children: [
+                      if (_connectionStatus != 'CONNECTED')
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: (_connectionStatus == 'PENDING' || _isProcessing) ? null : _handleConnect,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _connectionStatus == 'PENDING' ? Colors.grey : AppTheme.primaryViolet,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(0, 50),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                             ),
-                      ),
-                    ),
-                  if (_connectionStatus == 'CONNECTED')
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {},
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size(0, 50),
-                          side: const BorderSide(color: AppTheme.primaryViolet),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            child: _isProcessing 
+                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              : Text(
+                                  _connectionStatus == 'PENDING' ? 'Pending' : 'Connect', 
+                                  style: const TextStyle(fontWeight: FontWeight.bold)
+                                ),
+                          ),
                         ),
-                        child: const Text('Connected', style: TextStyle(color: AppTheme.primaryViolet, fontWeight: FontWeight.bold)),
+                      if (_connectionStatus == 'CONNECTED')
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {},
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 50),
+                              side: const BorderSide(color: AppTheme.primaryViolet),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            child: const Text('Connected', style: TextStyle(color: AppTheme.primaryViolet, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      const SizedBox(width: 12),
+                      CircleAvatar(
+                        radius: 25,
+                        backgroundColor: AppTheme.surfaceGray,
+                        child: IconButton(
+                          icon: const FaIcon(FontAwesomeIcons.solidMessage, size: 18, color: AppTheme.primaryViolet),
+                          onPressed: _handleMessage,
+                        ),
                       ),
-                    ),
-                  const SizedBox(width: 12),
-                  CircleAvatar(
-                    radius: 25,
-                    backgroundColor: AppTheme.surfaceGray,
-                    child: IconButton(
-                      icon: const FaIcon(FontAwesomeIcons.solidMessage, size: 18, color: AppTheme.primaryViolet),
-                      onPressed: _handleMessage,
-                    ),
-                  ),
-                ],
+                    ],
+                  );
+                }
               ),
             ),
 

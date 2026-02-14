@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/notification_provider.dart';
@@ -81,23 +82,78 @@ class _NotificationScreenState extends State<NotificationScreen> {
           itemCount: provider.pendingConnections.length,
           itemBuilder: (context, index) {
             final request = provider.pendingConnections[index];
-            return ListTile(
-              leading: CircleAvatar(
-                backgroundColor: AppTheme.surfaceGray,
-                child: const FaIcon(FontAwesomeIcons.user, size: 16, color: AppTheme.primaryViolet),
+            final String? senderPic = request['sender_pic'];
+            
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 10, offset: const Offset(0, 4)),
+                ],
               ),
-              title: Text(request['sender_name'] ?? 'Someone', style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: const Text('wants to connect with you'),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Column(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.check_circle, color: Colors.green),
-                    onPressed: () => provider.acceptRequest(request['id']),
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 25,
+                        backgroundColor: AppTheme.surfaceGray,
+                        backgroundImage: senderPic != null 
+                            ? NetworkImage(ApiService.getMediaUrl(senderPic)!) 
+                            : null,
+                        child: senderPic == null 
+                            ? const FaIcon(FontAwesomeIcons.user, size: 20, color: AppTheme.primaryViolet) 
+                            : null,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              request['sender_name'] ?? 'Someone',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            const Text(
+                              'wants to connect with you',
+                              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.cancel, color: Colors.red),
-                    onPressed: () => provider.rejectRequest(request['id']),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => provider.acceptRequest(request['id']),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryViolet,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          child: const Text('Accept', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => provider.rejectRequest(request['id']),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.grey.shade300),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            foregroundColor: Colors.red,
+                          ),
+                          child: const Text('Decline'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -182,10 +182,10 @@ class ApiService {
     }
   }
   
-  static Future<List<dynamic>> getFeed() async {
+  static Future<Map<String, dynamic>> getFeed({int page = 1}) async {
     final headers = await _authHeaders();
     final response = await http.get(
-      Uri.parse('$baseUrl/feed/'),
+      Uri.parse('$baseUrl/feed/?page=$page'),
       headers: headers,
     );
     
@@ -196,10 +196,10 @@ class ApiService {
     }
   }
 
-  static Future<List<dynamic>> getTrendingFeed() async {
+  static Future<Map<String, dynamic>> getTrendingFeed({int page = 1}) async {
     final headers = await _authHeaders();
     final response = await http.get(
-      Uri.parse('$baseUrl/feed/trending/'),
+      Uri.parse('$baseUrl/feed/trending/?page=$page'),
       headers: headers,
     );
     
@@ -234,18 +234,35 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
-  static Future<Map<String, dynamic>> addComment(int postId, String content) async {
+  static Future<Map<String, dynamic>> addComment(int postId, String content, {int? parentId}) async {
     final headers = await _authHeaders();
     final response = await http.post(
       Uri.parse('$baseUrl/posts/$postId/comment/'),
       headers: headers,
-      body: jsonEncode({'content': content}),
+      body: jsonEncode({
+        'content': content,
+        if (parentId != null) 'parent_id': parentId,
+      }),
     );
     
     if (response.statusCode == 201) {
       return jsonDecode(response.body);
     } else {
       throw Exception('Failed to add comment: ${response.body}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> likeComment(int commentId) async {
+    final headers = await _authHeaders();
+    final response = await http.post(
+      Uri.parse('$baseUrl/comments/$commentId/like/'),
+      headers: headers,
+    );
+    
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to like comment: ${response.body}');
     }
   }
 
@@ -278,10 +295,10 @@ class ApiService {
   }
   
   // Discovery Endpoints
-  static Future<List<dynamic>> getSuggestedPeople() async {
+  static Future<Map<String, dynamic>> getSuggestedPeople({int page = 1}) async {
     final headers = await _authHeaders();
     final response = await http.get(
-      Uri.parse('$baseUrl/suggested/'),
+      Uri.parse('$baseUrl/suggested/?page=$page'),
       headers: headers,
     );
     
@@ -290,6 +307,35 @@ class ApiService {
     } else {
       throw Exception('Failed to get suggestions: ${response.body}');
     }
+  }
+
+  static Future<List<dynamic>> getLeaderboard() async {
+    final headers = await _authHeaders();
+    final response = await http.get(
+      Uri.parse('$baseUrl/leaderboard/'),
+      headers: headers,
+    );
+    
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to get leaderboard: ${response.body}');
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getTrendingLocally() async {
+    final headers = await _authHeaders();
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/trending-locally/'),
+        headers: headers,
+      );
+      
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (_) {}
+    return null;
   }
   
   static Future<void> updateLocation(double latitude, double longitude) async {
@@ -412,13 +458,24 @@ class ApiService {
     }
   }
   
-  static Future<Map<String, dynamic>> sendMessage(int userId, String content) async {
-    final headers = await _authHeaders();
-    final response = await http.post(
-      Uri.parse('$baseUrl/chat/$userId/send/'),
-      headers: headers,
-      body: jsonEncode({'content': content}),
-    );
+  static Future<Map<String, dynamic>> sendMessage(int userId, {String? content, File? image, File? video}) async {
+    final token = await getToken();
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/chat/$userId/send/'));
+    
+    request.headers['Authorization'] = 'Bearer $token';
+    if (content != null) {
+      request.fields['content'] = content;
+    }
+    
+    if (image != null) {
+      request.files.add(await http.MultipartFile.fromPath('image', image.path));
+    }
+    if (video != null) {
+      request.files.add(await http.MultipartFile.fromPath('video', video.path));
+    }
+    
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
     
     if (response.statusCode == 201) {
       return jsonDecode(response.body);

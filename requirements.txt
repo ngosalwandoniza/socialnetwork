@@ -11,6 +11,7 @@ gunicorn>=21.0
 
 # Database (Production)
 psycopg2-binary>=2.9
+dj-database-url>=2.0
 
 # AWS S3 Storage (Optional - for media files)
 boto3>=1.34

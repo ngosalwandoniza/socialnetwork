@@ -201,6 +201,7 @@ class Notification(models.Model):
         ('CONNECTION_ACCEPTED', 'Connection Accepted'),
         ('COLLABORATION', 'Collaboration Invite'),
         ('RECOVERY_VOUCH', 'Recovery Vouch Request'),
+        ('COMMENT', 'New Comment'),
     ]
     
     recipient = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='notifications')

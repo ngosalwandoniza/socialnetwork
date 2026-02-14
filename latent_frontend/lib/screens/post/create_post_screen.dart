@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/feed_provider.dart';
+import '../../utils/media_helper.dart';
 
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key});
@@ -89,10 +90,21 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     setState(() => _isPosting = true);
 
     try {
+      File? finalImage = _selectedImage;
+      File? finalVideo = _selectedVideo;
+
+      if (_selectedImage != null) {
+        final compressed = await MediaHelper.compressImage(_selectedImage!);
+        if (compressed != null) finalImage = compressed;
+      } else if (_selectedVideo != null) {
+        final compressed = await MediaHelper.compressVideo(_selectedVideo!);
+        if (compressed != null) finalVideo = compressed;
+      }
+
       await context.read<FeedProvider>().createPost(
         caption, 
-        image: _selectedImage,
-        video: _selectedVideo,
+        image: finalImage,
+        video: finalVideo,
         postType: _selectedPostType,
       );
       if (mounted) {
@@ -122,16 +134,29 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
-          TextButton(
-            onPressed: _isPosting ? null : _createPost,
-            child: _isPosting
-                ? const SizedBox(
+          if (_isPosting)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Row(
+                children: [
+                   Text(
+                    _selectedVideo != null ? 'Uploading Video...' : 'Posting...', 
+                    style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)
+                  ),
+                  const SizedBox(width: 8),
+                  const SizedBox(
                     height: 16,
                     width: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Post', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryViolet)),
-          ),
+                  ),
+                ],
+              ),
+            )
+          else
+            TextButton(
+              onPressed: _createPost,
+              child: const Text('Post', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryViolet)),
+            ),
         ],
       ),
       body: SingleChildScrollView(
