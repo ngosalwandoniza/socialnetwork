@@ -23,6 +23,7 @@ jobs:
         with:
           flutter-version: '3.27.1'
           channel: 'stable'
+          cache: true
 
       - name: Get dependencies
         run: |
@@ -36,6 +37,7 @@ jobs:
             --dart-define=API_BASE_URL=http://98.93.41.22:8000/api \
             --dart-define=MEDIA_BASE_URL=http://98.93.41.22:8000 \
             --android-skip-build-dependency-validation
+        timeout-minutes: 30
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

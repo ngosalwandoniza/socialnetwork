@@ -47,12 +47,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
-    // Clear current chat so polling doesn't keep fetching these messages
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-         context.read<ChatProvider>().clearCurrentChat();
-      }
-    });
+    // Clear current chat synchronously before disposal
+    Provider.of<ChatProvider>(context, listen: false).clearCurrentChat();
     super.dispose();
   }
 
@@ -188,6 +184,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                             message['timestamp'],
                             image: message['image'],
                             video: message['video'],
+                            thumbnail: message['thumbnail'],
                             isSending: message['is_sending'] ?? false,
                           );
                         },
@@ -199,7 +196,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     );
   }
 
-  Widget _buildMessageBubble(String? text, bool isMe, String? timestamp, {String? image, String? video, bool isSending = false}) {
+  Widget _buildMessageBubble(String? text, bool isMe, String? timestamp, {String? image, String? video, String? thumbnail, bool isSending = false}) {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -235,15 +232,40 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                 ),
               ),
             if (video != null)
-              const Padding(
+              Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FaIcon(FontAwesomeIcons.video, size: 16, color: Colors.white),
-                    SizedBox(width: 8),
-                    Text('Video attached', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.white70)),
-                  ],
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      if (thumbnail != null)
+                        thumbnail.startsWith('/') // Local path
+                          ? Image.file(File(thumbnail), height: 200, width: double.infinity, fit: BoxFit.cover)
+                          : CachedNetworkImage(
+                              imageUrl: ApiService.getMediaUrl(thumbnail)!,
+                              placeholder: (context, url) => const SizedBox(height: 200, width: double.infinity, child: Center(child: CircularProgressIndicator())),
+                              errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
+                              fit: BoxFit.cover,
+                            )
+                      else
+                        Container(
+                          height: 200,
+                          width: double.infinity,
+                          color: Colors.black26,
+                          child: const Center(child: FaIcon(FontAwesomeIcons.video, size: 32, color: Colors.white24)),
+                        ),
+                      // Play Icon Overlay
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withAlpha(50),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const FaIcon(FontAwesomeIcons.play, size: 20, color: Colors.white),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             if (text != null && text.isNotEmpty)

@@ -1,15 +1,15 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
-    RegisterView, FeedView, TrendingFeedView, SuggestedPeopleView, 
+    TokenObtainPairView, RegisterView, FeedView, TrendingFeedView, SuggestedPeopleView, 
     UpdateLocationView, InterestsListView, UpdateInterestsView,
     MyProfileView, ProfileDetailView, UpdateProfileView,
-    CreatePostView, LikePostView, CommentPostView, CommentListView, UserStreaksView, UserPostsView,
+    CreatePostView, DeletePostView, LikePostView, CommentPostView, CommentListView, UserStreaksView, UserPostsView,
     ConnectionListView, SendConnectionRequestView, AcceptConnectionView, RejectConnectionView, DisconnectView,
     ConversationListView, ChatMessagesView, SendMessageView,
-    BlockUserView, ReportUserView,
+    BlockUserView, ReportUserView, DeleteAccountView,
     InviteContributorView, ContributeToPostView, CollaborativePostsView, PostContributorsView,
-    RegisterDeviceView, PendingConnectionsView, NotificationListView, MarkNotificationReadView,
+    RegisterDeviceView, PendingConnectionsView, NotificationListView, MarkNotificationReadView, MarkAllNotificationsReadView,
     GenerateRecoveryCodesView, InitiateRecoveryView, GuardianApprovalView, ResetPasswordRecoveryView,
     ManageGuardiansView, PendingGuardianRequestsView,
     LeaderboardView, TrendingLocallyView, LikeCommentView
@@ -40,6 +40,7 @@ urlpatterns = [
     path('posts/<int:pk>/like/', LikePostView.as_view(), name='like_post'),
     path('posts/<int:pk>/comment/', CommentPostView.as_view(), name='comment_post'),
     path('posts/<int:pk>/comments/', CommentListView.as_view(), name='post_comments'),
+    path('posts/<int:pk>/delete/', DeletePostView.as_view(), name='delete_post'),
     path('comments/<int:pk>/like/', LikeCommentView.as_view(), name='like_comment'),
     path('streaks/', UserStreaksView.as_view(), name='user_streaks'),
     
@@ -76,6 +77,10 @@ urlpatterns = [
     # Notifications
     path('notifications/', NotificationListView.as_view(), name='notifications_list'),
     path('notifications/<int:pk>/read/', MarkNotificationReadView.as_view(), name='mark_notification_read'),
+    path('notifications/read-all/', MarkAllNotificationsReadView.as_view(), name='mark_all_notifications_read'),
     path('notifications/register-device/', RegisterDeviceView.as_view(), name='register_device'),
     path('connections/pending/', PendingConnectionsView.as_view(), name='pending_connections'),
+    
+    # Account
+    path('account/delete/', DeleteAccountView.as_view(), name='delete_account'),
 ]

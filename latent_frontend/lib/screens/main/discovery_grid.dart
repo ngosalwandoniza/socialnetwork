@@ -12,6 +12,7 @@ import 'profile_screen.dart';
 import '../chat/chat_list_screen.dart';
 import '../post/create_post_screen.dart';
 import '../chat/chat_detail_screen.dart';
+import 'package:shimmer/shimmer.dart';
 import '../../services/api_service.dart';
 import 'profile_detail_screen.dart';
 import 'notification_screen.dart';
@@ -210,9 +211,12 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: discoveryProvider.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : discoveryProvider.suggestions.isEmpty
+              child: RefreshIndicator(
+                onRefresh: () => discoveryProvider.loadSuggestions(refresh: true),
+                color: AppTheme.primaryViolet,
+                child: discoveryProvider.isLoading && discoveryProvider.suggestions.isEmpty
+                    ? _buildShimmerGrid()
+                    : discoveryProvider.suggestions.isEmpty
                       ? discoveryProvider.friends.isNotEmpty
                           ? Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -318,9 +322,35 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
                             return _buildProfileCard(context, profile, discoveryProvider);
                           },
                         ),
+              ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildShimmerGrid() {
+    return Shimmer.fromColors(
+      baseColor: AppTheme.surfaceGray,
+      highlightColor: Colors.white.withAlpha(100),
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: 0.6,
+        ),
+        itemCount: 6,
+        itemBuilder: (context, index) {
+          return Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
+          );
+        },
       ),
     );
   }

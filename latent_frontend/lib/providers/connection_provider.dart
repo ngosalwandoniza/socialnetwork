@@ -1,13 +1,12 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/api_service.dart';
+import '../services/sync_service.dart';
 
 class ConnectionProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _connections = [];
   List<Map<String, dynamic>> _pendingConnections = [];
   bool _isLoading = false;
   String? _error;
-  Timer? _pollTimer;
 
   List<Map<String, dynamic>> get connections => _connections;
   List<Map<String, dynamic>> get pendingConnections => _pendingConnections;
@@ -15,26 +14,18 @@ class ConnectionProvider extends ChangeNotifier {
   String? get error => _error;
 
   void startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
-      _pollUpdate();
-    });
+    SyncService().register(pollUpdate);
   }
 
   void stopPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = null;
+    SyncService().unregister(pollUpdate);
   }
 
-  Future<void> _pollUpdate() async {
+  Future<void> pollUpdate() async {
     try {
       final data = await ApiService.getPendingConnections();
-      final newPending = List<Map<String, dynamic>>.from(data);
-      
-      if (newPending.length != _pendingConnections.length) {
-        _pendingConnections = newPending;
-        notifyListeners();
-      }
+      _pendingConnections = List<Map<String, dynamic>>.from(data);
+      notifyListeners();
     } catch (e) {
       debugPrint("Connection polling error: $e");
     }

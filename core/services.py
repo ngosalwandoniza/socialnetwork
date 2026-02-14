@@ -120,7 +120,8 @@ class FeedService:
             .annotate(
                 likes_count=Count('likes', distinct=True),
                 comments_count=Count('comments', distinct=True)
-            ).prefetch_related('author__interests')
+            ).prefetch_related('author__interests')\
+            .order_by('-created_at')[:500]  # Cap to prevent loading entire table
         
         user_interests = set(user_profile.interests.values_list('id', flat=True))
         user_loc = user_profile.current_location

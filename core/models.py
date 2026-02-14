@@ -33,34 +33,31 @@ class Profile(models.Model):
     last_active = models.DateTimeField(auto_now=True)
     is_discovery_on = models.BooleanField(default=True)
     fcm_token = models.CharField(max_length=255, null=True, blank=True)
+    
+    # Denormalized fields for performance
+    posts_count = models.PositiveIntegerField(default=0)
+    connections_count = models.PositiveIntegerField(default=0)
+    social_gravity = models.FloatField(default=1.0)
 
-    @property
-    def posts_count(self):
-        return self.posts.count()
-
-    @property
-    def connections_count(self):
-        return Connection.objects.filter(
+    def refresh_gravity(self):
+        """
+        Recalculates Social Gravity and cached counts.
+        """
+        self.posts_count = self.posts.count()
+        self.connections_count = Connection.objects.filter(
             Q(sender=self, status='CONNECTED') | Q(receiver=self, status='CONNECTED')
         ).count()
-
-    @property
-    def social_gravity(self):
-        """
-        Calculates a Social Gravity score (0.0 to 5.0) based on:
-        - Connection count (weight: 40%)
-        - Post count (weight: 30%)
-        - Activity recency (weight: 30%)
-        """
-        conn_score = min(self.connections_count / 10, 1) * 2.0  # Max 2.0
-        post_score = min(self.posts_count / 20, 1) * 1.5       # Max 1.5
         
-        # Recency score
+        # Calculate score (using same logic but updating field)
+        conn_score = min(self.connections_count / 10, 1) * 2.0
+        post_score = min(self.posts_count / 20, 1) * 1.5
+        
         last_24h = timezone.now() - timedelta(hours=24)
         recency_score = 1.5 if self.last_active > last_24h else 0.5
         
         score = conn_score + post_score + recency_score
-        return round(min(max(score, 1.0), 5.0), 1)
+        self.social_gravity = round(min(max(score, 1.0), 5.0), 1)
+        self.save(update_fields=['posts_count', 'connections_count', 'social_gravity'])
 
     def __str__(self):
         return self.username
@@ -110,6 +107,13 @@ class Post(models.Model):
     def __str__(self):
         return f"Post by {self.author.username} at {self.location}"
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['expires_at']),
+            models.Index(fields=['author', '-created_at']),
+        ]
+
 class Like(models.Model):
     user = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='likes')
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='likes')
@@ -130,7 +134,7 @@ class Streak(models.Model):
     user = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='streaks')
     location = models.ForeignKey(LocationRoom, on_delete=models.CASCADE)
     count = models.PositiveIntegerField(default=1)
-    last_post_date = models.DateField(auto_now=True)
+    last_post_date = models.DateField()
 
     class Meta:
         unique_together = ('user', 'location')
@@ -147,11 +151,15 @@ class Connection(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        unique_together = ('sender', 'receiver')
-    
     def __str__(self):
         return f"{self.sender.username} -> {self.receiver.username} ({self.status})"
+
+    class Meta:
+        unique_together = ('sender', 'receiver')
+        indexes = [
+            models.Index(fields=['sender', 'status']),
+            models.Index(fields=['receiver', 'status']),
+        ]
 
 class ChatMessage(models.Model):
     sender = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='sent_messages')
@@ -159,6 +167,7 @@ class ChatMessage(models.Model):
     content = models.TextField(blank=True)
     image = models.ImageField(upload_to='chat_images/', null=True, blank=True)
     video = models.FileField(upload_to='chat_videos/', null=True, blank=True)
+    thumbnail = models.ImageField(upload_to='chat_thumbnails/', null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
     expires_at = models.DateTimeField(null=True, blank=True)
@@ -170,6 +179,12 @@ class ChatMessage(models.Model):
 
     def __str__(self):
         return f"Msg from {self.sender.username} to {self.receiver.username}"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['sender', 'receiver', '-timestamp']),
+            models.Index(fields=['receiver', 'is_read']),
+        ]
 
 
 class Report(models.Model):
@@ -252,6 +267,7 @@ class RecoveryRequest(models.Model):
     token = models.CharField(max_length=6, unique=True) # 6-digit token shared offline
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING')
     approvals = models.ManyToManyField(Profile, related_name='approved_recoveries', blank=True)
+    attempts = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
 

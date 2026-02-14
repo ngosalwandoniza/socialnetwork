@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/api_service.dart';
+import '../services/sync_service.dart';
 import '../utils/media_helper.dart';
 import '../services/local_db.dart';
 import 'dart:io';
+import 'package:video_compress/video_compress.dart';
 
 class ChatProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _conversations = [];
@@ -11,27 +13,15 @@ class ChatProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   int? _currentChatUserId;
-  Timer? _pollTimer;
-  
-  List<Map<String, dynamic>> get conversations => _conversations;
-  List<Map<String, dynamic>> get currentMessages => _currentMessages;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
-  int get totalUnreadCount => _conversations.fold(0, (sum, conv) => sum + (conv['unread_count'] as int? ?? 0));
-  
   void startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      _pollUpdate();
-    });
+    SyncService().register(pollUpdate);
   }
 
   void stopPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = null;
+    SyncService().unregister(pollUpdate);
   }
 
-  Future<void> _pollUpdate() async {
+  Future<void> pollUpdate() async {
     // Silently update conversations
     try {
       final convs = await ApiService.getConversations();
@@ -42,10 +32,7 @@ class ChatProvider extends ChangeNotifier {
         final msgs = await ApiService.getChatMessages(_currentChatUserId!);
         final newMsgs = List<Map<String, dynamic>>.from(msgs);
         
-        // Only update if count changed (simple check)
-        if (newMsgs.length != _currentMessages.length) {
-          _currentMessages = newMsgs;
-        }
+        _currentMessages = newMsgs;
       }
       notifyListeners();
     } catch (e) {
@@ -127,16 +114,30 @@ class ChatProvider extends ChangeNotifier {
       // Compress if media exists
       File? finalImage = image;
       File? finalVideo = video;
+      File? thumbnailFile;
 
       if (image != null) {
         final compressed = await MediaHelper.compressImage(image);
         if (compressed != null) finalImage = compressed;
       } else if (video != null) {
+        // Generate thumbnail before compression
+        thumbnailFile = await VideoCompress.getFileThumbnail(
+          video.path,
+          quality: 50,
+          position: -1,
+        );
+        
         final compressed = await MediaHelper.compressVideo(video);
         if (compressed != null) finalVideo = compressed;
       }
 
-      final message = await ApiService.sendMessage(userId, content: content, image: finalImage, video: finalVideo);
+      final message = await ApiService.sendMessage(
+        userId, 
+        content: content, 
+        image: finalImage, 
+        video: finalVideo, 
+        thumbnail: thumbnailFile
+      );
       
       if (isOptimistic && optimisticMsg != null) {
         // Replace optimistic message with actual server response

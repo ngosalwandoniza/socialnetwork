@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.db.models import Q
 from django.utils import timezone
-from .models import Profile, Interest, LocationRoom, Post, Connection, ChatMessage, Like, Comment, Streak, Notification
+from .models import Profile, Interest, LocationRoom, Post, Connection, ChatMessage, Like, Comment, Streak, Notification, RecoveryRequest
 
 class InterestSerializer(serializers.ModelSerializer):
     class Meta:
@@ -39,12 +39,34 @@ class ProfileSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return 'NONE'
         
+        # Use pre-loaded connection map if available (bulk optimization)
+        conn_map = self.context.get('_connection_map')
+        if conn_map is not None:
+            return conn_map.get(obj.id, 'NONE')
+        
         user_profile = request.user.profile
         connection = Connection.objects.filter(
             Q(sender=user_profile, receiver=obj) | Q(sender=obj, receiver=user_profile)
         ).first()
         
         return connection.status if connection else 'NONE'
+
+    @classmethod
+    def many_init(cls, *args, **kwargs):
+        """Pre-load connection statuses in bulk when serializing many profiles."""
+        result = super().many_init(*args, **kwargs)
+        request = kwargs.get('context', {}).get('request')
+        if request and request.user.is_authenticated:
+            user_profile = request.user.profile
+            connections = Connection.objects.filter(
+                Q(sender=user_profile) | Q(receiver=user_profile)
+            ).values('sender_id', 'receiver_id', 'status')
+            conn_map = {}
+            for c in connections:
+                other_id = c['sender_id'] if c['sender_id'] != user_profile.id else c['receiver_id']
+                conn_map[other_id] = c['status']
+            result.child.context['_connection_map'] = conn_map
+        return result
 
     def get_streak_count(self, obj):
         if obj.current_location:
@@ -83,8 +105,11 @@ class RegistrationSerializer(serializers.ModelSerializer):
         fields = ['username', 'password', 'profile_picture', 'age', 'gender', 'interest_ids']
 
     def validate_username(self, value):
-        if not value.isalnum() and '_' not in value:
+        import re
+        if not re.match(r'^[a-zA-Z0-9_]+$', value):
             raise serializers.ValidationError("Usernames can only contain letters, numbers, and underscores.")
+        if len(value) < 3:
+            raise serializers.ValidationError("Username must be at least 3 characters long.")
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError("This username is already taken.")
         return value
@@ -113,15 +138,22 @@ class PostSerializer(serializers.ModelSerializer):
     author_pic = serializers.ImageField(source='author.profile_picture', read_only=True)
     likes_count = serializers.IntegerField(source='likes.count', read_only=True)
     comments_count = serializers.IntegerField(source='comments.count', read_only=True)
+    is_liked = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
             'id', 'author', 'author_name', 'author_pic', 'content_text', 'image', 'video', 'thumbnail',
             'location', 'contributors', 'created_at', 'expires_at', 'likes_count', 'comments_count',
-            'post_type', 'is_collaborative'
+            'post_type', 'is_collaborative', 'is_liked'
         ]
         read_only_fields = ['author', 'expires_at', 'created_at']
+
+    def get_is_liked(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.likes.filter(user=request.user.profile).exists()
+        return False
 
     def validate(self, data):
         """Ensure at least one form of content exists."""
@@ -189,10 +221,21 @@ class ChatMessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ChatMessage
-        fields = ['id', 'sender', 'sender_name', 'receiver', 'receiver_name', 'content', 'image', 'video', 'timestamp', 'is_read', 'expires_at']
+        fields = ['id', 'sender', 'sender_name', 'receiver', 'receiver_name', 'content', 'image', 'video', 'thumbnail', 'timestamp', 'is_read', 'expires_at']
 
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = '__all__'
+
+class RecoverySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RecoveryRequest
+        fields = ['id', 'profile', 'status', 'created_at', 'expires_at', 'attempts']
+
+class PasswordResetSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(min_length=6)
+

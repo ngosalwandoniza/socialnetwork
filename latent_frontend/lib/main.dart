@@ -12,6 +12,7 @@ import 'providers/discovery_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/connection_provider.dart';
 import 'providers/notification_provider.dart';
+import 'services/sync_service.dart';
 
 void main() {
   if (Platform.isWindows || Platform.isLinux) {
@@ -84,9 +85,17 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final authProvider = context.watch<AuthProvider>();
     
     if (authProvider.isLoggedIn) {
+      SyncService().start();
       return const DiscoveryGrid();
     } else {
+      SyncService().stop();
       return const LandingPage();
     }
+  }
+
+  @override
+  void dispose() {
+    SyncService().stop();
+    super.dispose();
   }
 }

@@ -44,13 +44,26 @@ class DiscoveryProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final data = await ApiService.getConnections();
-      // Connections data is slightly different, we need to extract the 'other' profile
+      final myProfile = await ApiService.getMyProfile();
+      final myId = myProfile['id'];
+
       _friends = List<Map<String, dynamic>>.from(data.map((c) {
         // Return the profile that is NOT the current user
-        // But since the API returns sender/receiver, we just need the other one
-        // For simplicity, let's assume the API returns what we need or adjust it here
-        // Usually ConnectionSerializer returns sender and receiver info.
-        return c; // We'll handle mapping in the UI or adjust here if we have user info
+        if (c['sender'] == myId) {
+          return {
+            'id': c['receiver'],
+            'username': c['receiver_name'],
+            'profile_picture': c['receiver_pic'],
+            'connection_status': 'CONNECTED',
+          };
+        } else {
+          return {
+            'id': c['sender'],
+            'username': c['sender_name'],
+            'profile_picture': c['sender_pic'],
+            'connection_status': 'CONNECTED',
+          };
+        }
       }));
       _isFriendsLoading = false;
       notifyListeners();

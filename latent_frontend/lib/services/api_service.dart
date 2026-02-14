@@ -40,6 +40,50 @@ class ApiService {
       if (token != null) 'Authorization': 'Bearer $token',
     };
   }
+
+  /// Attempts to refresh the access token using the stored refresh token.
+  /// Returns true if successful, false otherwise.
+  static Future<bool> _refreshToken() async {
+    final prefs = await _prefs;
+    final refreshToken = prefs.getString('refresh_token');
+    if (refreshToken == null) return false;
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/token/refresh/'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refresh': refreshToken}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        await prefs.setString('access_token', data['access']);
+        // Some backends also rotate the refresh token
+        if (data.containsKey('refresh')) {
+          await prefs.setString('refresh_token', data['refresh']);
+        }
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  /// Wrapper that auto-retries a request once if the server returns 401.
+  static Future<http.Response> _authenticatedRequest(
+    Future<http.Response> Function(Map<String, String> headers) requestFn,
+  ) async {
+    var headers = await _authHeaders();
+    var response = await requestFn(headers);
+
+    if (response.statusCode == 401) {
+      final refreshed = await _refreshToken();
+      if (refreshed) {
+        headers = await _authHeaders();
+        response = await requestFn(headers);
+      }
+    }
+    return response;
+  }
   
   // Auth Endpoints
   static Future<Map<String, dynamic>> login(String username, String password) async {
@@ -458,7 +502,7 @@ class ApiService {
     }
   }
   
-  static Future<Map<String, dynamic>> sendMessage(int userId, {String? content, File? image, File? video}) async {
+  static Future<Map<String, dynamic>> sendMessage(int userId, {String? content, File? image, File? video, File? thumbnail}) async {
     final token = await getToken();
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/chat/$userId/send/'));
     
@@ -472,6 +516,9 @@ class ApiService {
     }
     if (video != null) {
       request.files.add(await http.MultipartFile.fromPath('video', video.path));
+    }
+    if (thumbnail != null) {
+      request.files.add(await http.MultipartFile.fromPath('thumbnail', thumbnail.path));
     }
     
     final streamedResponse = await request.send();

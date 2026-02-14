@@ -3,23 +3,32 @@ import string
 from datetime import timedelta
 from django.utils import timezone
 from django.contrib.auth.hashers import make_password, check_password
-from rest_framework import status, views, response, permissions
+from rest_framework import views, response, status, permissions
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework_simplejwt.views import TokenObtainPairView as SimpleJWTTokenObtainPairView
 from django.db.models import Q, Max
 from .serializers import (
     RegistrationSerializer, ProfileSerializer, PostSerializer, 
     LocationRoomSerializer, ConnectionSerializer, ChatMessageSerializer,
-    CommentSerializer, LikeSerializer, StreakSerializer, NotificationSerializer
+    CommentSerializer, LikeSerializer, StreakSerializer, NotificationSerializer,
+    RecoverySerializer, PasswordResetSerializer
 )
 from .models import (
     Profile, Post, LocationRoom, Interest, Connection, ChatMessage, 
-    Like, Comment, Streak, Notification, RecoveryCode, RecoveryGuardian, RecoveryRequest
+    Like, Comment, Streak, Notification, RecoveryCode, RecoveryGuardian, RecoveryRequest, Report
 )
 from .services import MatchService, FeedService, ProximityService, StreakService
+from .throttles import AuthThrottle, RecoveryThrottle
+
+
+class TokenObtainPairView(SimpleJWTTokenObtainPairView):
+    throttle_classes = [AuthThrottle]
 
 
 class RegisterView(views.APIView):
     permission_classes = [permissions.AllowAny]
+    parser_classes = [MultiPartParser, FormParser]
+    throttle_classes = [AuthThrottle]
 
     def post(self, request):
         serializer = RegistrationSerializer(data=request.data)
@@ -81,9 +90,18 @@ class FeedView(views.APIView):
 
 class TrendingFeedView(views.APIView):
     def get(self, request):
-        posts = FeedService.get_trending_feed()
-        serializer = PostSerializer(posts, many=True, context={'request': request})
-        return response.Response(serializer.data)
+        page = int(request.query_params.get('page', 1))
+        page_size = 20
+        start = (page - 1) * page_size
+        end = start + page_size
+        
+        posts = FeedService.get_trending_feed(limit=100)
+        paginated_posts = posts[start:end]
+        serializer = PostSerializer(paginated_posts, many=True, context={'request': request})
+        return response.Response({
+            'results': serializer.data,
+            'has_next': len(posts) > end
+        })
 
 
 class CreatePostView(views.APIView):
@@ -99,8 +117,20 @@ class CreatePostView(views.APIView):
             if profile.current_location:
                 StreakService.update_streak(profile, profile.current_location)
                 
-            return response.Response(PostSerializer(post).data, status=status.HTTP_201_CREATED)
+            return response.Response(PostSerializer(post, context={'request': request}).data, status=status.HTTP_201_CREATED)
         return response.Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class DeletePostView(views.APIView):
+    def delete(self, request, pk):
+        profile = request.user.profile
+        try:
+            post = Post.objects.get(pk=pk, author=profile)
+        except Post.DoesNotExist:
+            return response.Response({"error": "Post not found or you're not the author"}, status=status.HTTP_404_NOT_FOUND)
+        
+        post.delete()
+        return response.Response({"message": "Post deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
 
 
 class LikePostView(views.APIView):
@@ -355,43 +385,44 @@ class RejectConnectionView(views.APIView):
 
 
 # Chat Views
+from django.db.models import OuterRef, Subquery, IntegerField, CharField, DateTimeField, Count, Case, When, Value
+
 class ConversationListView(views.APIView):
     def get(self, request):
         profile = request.user.profile
         
-        # Get unique partner IDs from messages
-        sent_partners = ChatMessage.objects.filter(sender=profile).values_list('receiver_id', flat=True).distinct()
-        received_partners = ChatMessage.objects.filter(receiver=profile).values_list('sender_id', flat=True).distinct()
-        partner_ids = set(sent_partners) | set(received_partners)
-        
-        if not partner_ids:
-            return response.Response([])
+        # Subquery to get the last message content for each conversation partner
+        last_msg_subquery = ChatMessage.objects.filter(
+            Q(sender=profile, receiver=OuterRef('pk')) | Q(sender=OuterRef('pk'), receiver=profile)
+        ).order_by('-timestamp')
 
-        # Fetch all partner profiles and pre-calculate last message and unread count
-        partners = Profile.objects.filter(id__in=partner_ids)
-        conversations = []
+        # Subquery to get unread count from the partner
+        unread_count_subquery = ChatMessage.objects.filter(
+            sender=OuterRef('pk'), 
+            receiver=profile, 
+            is_read=False
+        ).values('receiver').annotate(cnt=Count('pk')).values('cnt')
+
+        # Main query: Fetch partners and annotate with subquery data
+        partners = Profile.objects.filter(
+            Q(sent_messages__receiver=profile) | Q(received_messages__sender=profile)
+        ).distinct().annotate(
+            last_msg_content=Subquery(last_msg_subquery.values('content')[:1], output_field=CharField()),
+            last_msg_timestamp=Subquery(last_msg_subquery.values('timestamp')[:1], output_field=DateTimeField()),
+            unread_count=Subquery(unread_count_subquery, output_field=IntegerField())
+        )
         
+        conversations = []
         for partner in partners:
-            # Last message for this specific pair
-            last_message = ChatMessage.objects.filter(
-                Q(sender=profile, receiver=partner) | Q(sender=partner, receiver=profile)
-            ).order_by('-timestamp').first()
-            
-            # Unread count from this partner to the current user
-            unread_count = ChatMessage.objects.filter(
-                sender=partner, receiver=profile, is_read=False
-            ).count()
-            
             conversations.append({
                 'partner_id': partner.id,
                 'partner_name': partner.username,
                 'partner_pic': partner.profile_picture.url if partner.profile_picture else None,
-                'last_message': last_message.content if last_message else '',
-                'last_timestamp': last_message.timestamp if last_message else None,
-                'unread_count': unread_count
+                'last_message': partner.last_msg_content or '',
+                'last_timestamp': partner.last_msg_timestamp,
+                'unread_count': partner.unread_count or 0
             })
         
-        # Sort by last message timestamp
         conversations.sort(key=lambda x: x['last_timestamp'] or timezone.now() - timedelta(days=365), reverse=True)
         return response.Response(conversations)
 
@@ -416,6 +447,8 @@ class ChatMessagesView(views.APIView):
 
 
 class SendMessageView(views.APIView):
+    parser_classes = [MultiPartParser, FormParser]
+
     def post(self, request, user_id):
         profile = request.user.profile
         try:
@@ -424,18 +457,26 @@ class SendMessageView(views.APIView):
             return response.Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
         
         content = request.data.get('content', '')
-        if not content:
-            return response.Response({"error": "Message content required"}, status=status.HTTP_400_BAD_REQUEST)
+        image = request.FILES.get('image')
+        video = request.FILES.get('video')
+        thumbnail = request.FILES.get('thumbnail')
         
-        message = ChatMessage.objects.create(sender=profile, receiver=receiver, content=content)
+        if not content and not image and not video:
+            return response.Response({"error": "Message content, image, or video required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        message = ChatMessage.objects.create(
+            sender=profile, receiver=receiver,
+            content=content, image=image, video=video, thumbnail=thumbnail
+        )
         
         # Log Notification
+        preview = content[:50] if content else ('📷 Image' if image else '🎥 Video')
         Notification.objects.create(
             recipient=receiver,
             sender=profile,
             notification_type='MESSAGE',
             title=f'New message from {profile.username}',
-            body=content[:50] + ('...' if len(content) > 50 else '')
+            body=preview + ('...' if len(content) > 50 else '')
         )
         
         serializer = ChatMessageSerializer(message)
@@ -445,6 +486,14 @@ class SendMessageView(views.APIView):
 class DeleteAccountView(views.APIView):
     def post(self, request):
         user = request.user
+        password = request.data.get('password')
+        
+        if not password:
+            return response.Response({"error": "Password is required to delete account"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not user.check_password(password):
+            return response.Response({"error": "Incorrect password"}, status=status.HTTP_403_FORBIDDEN)
+        
         # All related data (Profile, Posts, etc) will be deleted due to CASCADE
         user.delete()
         return response.Response({"message": "Account permanently deleted"}, status=status.HTTP_204_NO_CONTENT)
@@ -692,9 +741,20 @@ class PendingConnectionsView(views.APIView):
 class NotificationListView(views.APIView):
     def get(self, request):
         profile = request.user.profile
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 30))
+        start = (page - 1) * page_size
+        end = start + page_size
+        
         notifications = Notification.objects.filter(recipient=profile).order_by('-created_at')
-        serializer = NotificationSerializer(notifications, many=True)
-        return response.Response(serializer.data)
+        total = notifications.count()
+        paginated = notifications[start:end]
+        serializer = NotificationSerializer(paginated, many=True)
+        return response.Response({
+            'results': serializer.data,
+            'has_next': total > end,
+            'unread_count': notifications.filter(is_read=False).count()
+        })
 
 
 class MarkNotificationReadView(views.APIView):
@@ -707,6 +767,13 @@ class MarkNotificationReadView(views.APIView):
             return response.Response({"message": "Notification marked as read"})
         except Notification.DoesNotExist:
             return response.Response({"error": "Notification not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+class MarkAllNotificationsReadView(views.APIView):
+    def post(self, request):
+        profile = request.user.profile
+        updated = Notification.objects.filter(recipient=profile, is_read=False).update(is_read=True)
+        return response.Response({"message": f"{updated} notifications marked as read"})
 
 
 # Password Recovery Views
@@ -731,6 +798,7 @@ class GenerateRecoveryCodesView(views.APIView):
 
 class InitiateRecoveryView(views.APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [RecoveryThrottle]
 
     def post(self, request):
         username = request.data.get('username')
@@ -792,11 +860,13 @@ class GuardianApprovalView(views.APIView):
             req.save()
             return response.Response({"message": "Recovery approved. The user can now reset their password."})
             
+        req.save() # Save any changes to req (though approvals is m2m, status change needs save)
         return response.Response({"message": "Approval recorded. Waiting for more guardians."})
 
 
 class ResetPasswordRecoveryView(views.APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [RecoveryThrottle]
 
     def post(self, request):
         username = request.data.get('username')
@@ -835,6 +905,14 @@ class ResetPasswordRecoveryView(views.APIView):
             user.save()
             return response.Response({"message": "Password reset successfully"})
             
+        # Increment attempts on ANY failure if a request exists
+        active_req = RecoveryRequest.objects.filter(profile=profile, status__in=['PENDING', 'APPROVED']).first()
+        if active_req:
+            active_req.attempts += 1
+            if active_req.attempts >= 10:
+                active_req.status = 'EXPIRED'
+            active_req.save()
+
         return response.Response({"error": "Invalid recovery data or approvals incomplete"}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -886,13 +964,7 @@ class PendingGuardianRequestsView(views.APIView):
 class LeaderboardView(views.APIView):
     def get(self, request):
         """Top 10 users ranked by social gravity."""
-        # Note: In a large app, you'd cache this or pre-calculate it.
-        # But for beta, we calculate it on the fly.
-        profiles = sorted(
-            Profile.objects.all(), 
-            key=lambda p: p.social_gravity, 
-            reverse=True
-        )[:10]
+        profiles = Profile.objects.order_by('-social_gravity')[:10]
         serializer = ProfileSerializer(profiles, many=True, context={'request': request})
         return response.Response(serializer.data)
 
@@ -909,15 +981,13 @@ class TrendingLocallyView(views.APIView):
         if region:
             posts = posts.filter(location__region=region)
             
-        # Sort by engagement (likes + comments)
-        trending_post = sorted(
-            posts,
-            key=lambda p: p.likes.count() + p.comments.count(),
-            reverse=True
-        )[:1] # Just get the top 1
+        # Sort by engagement using DB-level annotation (avoids N+1)
+        trending_post = posts.annotate(
+            engagement=Count('likes', distinct=True) + Count('comments', distinct=True)
+        ).order_by('-engagement').first()
         
         if trending_post:
-            serializer = PostSerializer(trending_post[0], context={'request': request})
+            serializer = PostSerializer(trending_post, context={'request': request})
             return response.Response(serializer.data)
             
         return response.Response({"message": "No trending posts found locally"}, status=status.HTTP_404_NOT_FOUND)
