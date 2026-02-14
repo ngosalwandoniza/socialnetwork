@@ -32,15 +32,19 @@ jobs:
 
       - name: Create CI signing keystore
         run: |
-          mkdir -p $HOME/.android
+          cd latent_frontend/android
           keytool -genkey -v \
-            -keystore $HOME/.android/debug.keystore \
+            -keystore ci-release.keystore \
             -storepass android \
-            -alias androiddebugkey \
+            -alias ci \
             -keypass android \
             -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Android Debug,O=Android,C=US" \
+            -dname "CN=CI Build,O=Latent,C=US" \
             -noprompt
+          echo "storePassword=android" > key.properties
+          echo "keyPassword=android" >> key.properties
+          echo "keyAlias=ci" >> key.properties
+          echo "storeFile=../ci-release.keystore" >> key.properties
 
       - name: Build APK
         run: |
