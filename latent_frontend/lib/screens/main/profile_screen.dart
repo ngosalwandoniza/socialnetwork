@@ -34,11 +34,16 @@ class ProfileScreen extends StatelessWidget {
               children: [
                 Container(
                   height: 200,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [AppTheme.primaryViolet, AppTheme.accentPink],
+                      colors: [
+                        const Color(0xFF1A0533),  // Deep charcoal purple
+                        AppTheme.primaryViolet.withAlpha(220),
+                        const Color(0xFF0D1B2A),  // Dark navy
+                      ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
+                      stops: const [0.0, 0.5, 1.0],
                     ),
                   ),
                 ),

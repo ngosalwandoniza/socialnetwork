@@ -323,9 +323,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                         color: isMe ? Colors.white.withAlpha(180) : AppTheme.textSecondary,
                       ),
                     ),
-                    if (isMe && isSending) ...[
+                    if (isMe) ...[
                       const SizedBox(width: 4),
-                      const FaIcon(FontAwesomeIcons.clock, size: 8, color: Colors.white70),
+                      isSending
+                        ? const FaIcon(FontAwesomeIcons.clock, size: 8, color: Colors.white70)
+                        : const FaIcon(FontAwesomeIcons.check, size: 8, color: Colors.white),
                     ],
                   ],
                 ),

@@ -165,14 +165,15 @@ class FeedService:
         offset = (page - 1) * page_size
         now = timezone.now()
         
-        # 1. Fetch a pool for scoring (still need a slightly larger pool for ranking)
+        # 1. Fetch a pool for scoring — larger pool when shuffling for more variety
+        pool_size = 200 if shuffle else 50
         posts = Post.objects.filter(Q(expires_at__gt=now) | Q(expires_at__isnull=True))\
             .select_related('author', 'location')\
             .annotate(
                 likes_count=Count('likes', distinct=True),
                 comments_count=Count('comments', distinct=True)
             ).prefetch_related('author__interests')\
-            .order_by('-created_at')[offset:offset + 50] # Fetch 50 for this "page" of ranking
+            .order_by('-created_at')[offset:offset + pool_size]
         
         user_interests = set(user_profile.interests.values_list('id', flat=True))
         user_loc = user_profile.current_location
@@ -218,12 +219,13 @@ class FeedService:
         """
         offset = (page - 1) * page_size
         now = timezone.now()
+        pool_size = 200 if shuffle else 50
         posts = Post.objects.filter(Q(expires_at__gt=now) | Q(expires_at__isnull=True))\
             .select_related('author', 'location')\
             .annotate(
                 likes_count=Count('likes', distinct=True),
                 comments_count=Count('comments', distinct=True)
-            ).order_by('-created_at')[offset:offset + 50]
+            ).order_by('-created_at')[offset:offset + pool_size]
         
         scored_posts = []
         for post in posts:
