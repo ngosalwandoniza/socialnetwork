@@ -44,6 +44,7 @@ class RegisterView(views.APIView):
 class MyProfileView(views.APIView):
     def get(self, request):
         profile = request.user.profile
+        profile.refresh_gravity()  # Ensure posts_count & connections_count are fresh
         serializer = ProfileSerializer(profile, context={'request': request})
         return response.Response(serializer.data)
 

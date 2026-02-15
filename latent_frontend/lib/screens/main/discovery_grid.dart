@@ -473,7 +473,7 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          profile['username'] ?? 'Latent User',
+                          profile['username'] ?? '',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                           overflow: TextOverflow.ellipsis,
                         ),

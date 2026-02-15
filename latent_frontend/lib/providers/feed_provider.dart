@@ -32,7 +32,7 @@ class FeedProvider extends ChangeNotifier {
     }
     
     try {
-      final data = await ApiService.getFeed(page: _currentPage);
+      final data = await ApiService.getFeed(page: _currentPage, random: true);
       final newPosts = List<Map<String, dynamic>>.from(data['results'] ?? []);
       
       if (_currentPage == 1) {
