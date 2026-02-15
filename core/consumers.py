@@ -1,14 +1,14 @@
 """WebSocket consumers for real-time chat functionality."""
 
 import json
-from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.generic.websocket import AsyncWebSocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
 from .models import ChatMessage, Profile, Notification
 from .serializers import ChatMessageSerializer
 
 
-class ChatConsumer(AsyncWebsocketConsumer):
+class ChatConsumer(AsyncWebSocketConsumer):
     """
     Handles real-time chat via WebSocket.
     
