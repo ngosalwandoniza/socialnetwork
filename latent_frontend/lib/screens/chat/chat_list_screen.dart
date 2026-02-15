@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../providers/chat_provider.dart';
 import 'chat_detail_screen.dart';
 import '../../services/api_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../providers/notification_provider.dart';
 import '../main/notification_screen.dart';
 import '../main/friend_list_screen.dart';
@@ -106,7 +107,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         radius: 28,
                         backgroundColor: AppTheme.surfaceGray,
                         backgroundImage: chat['partner_pic'] != null
-                            ? NetworkImage(ApiService.getMediaUrl(chat['partner_pic'])!)
+                            ? CachedNetworkImageProvider(ApiService.getMediaUrl(chat['partner_pic'])!)
                             : null,
                         child: chat['partner_pic'] == null
                             ? const FaIcon(FontAwesomeIcons.solidUser, color: AppTheme.primaryViolet, size: 24)
@@ -159,6 +160,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             builder: (context) => ChatDetailScreen(
                               userId: chat['partner_id'],
                               userName: chat['partner_name'] ?? 'User',
+                              userProfilePicture: chat['partner_pic'],
                             ),
                           ),
                         );

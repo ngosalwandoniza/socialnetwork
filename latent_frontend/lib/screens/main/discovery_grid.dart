@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
+import '../../services/api_service.dart';
 import '../../providers/discovery_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
@@ -13,10 +14,8 @@ import '../chat/chat_list_screen.dart';
 import '../post/create_post_screen.dart';
 import '../chat/chat_detail_screen.dart';
 import 'package:shimmer/shimmer.dart';
-import '../../services/api_service.dart';
 import 'profile_detail_screen.dart';
 import 'notification_screen.dart';
-import 'friend_list_screen.dart';
 
 class DiscoveryGrid extends StatefulWidget {
   const DiscoveryGrid({super.key});
@@ -134,13 +133,35 @@ class DiscoveryBody extends StatefulWidget {
 }
 
 class _DiscoveryBodyState extends State<DiscoveryBody> {
+  String? _selectedInterest;
+  List<dynamic> _allInterests = [];
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DiscoveryProvider>().loadSuggestions();
       context.read<DiscoveryProvider>().loadFriends();
+      _fetchInterests();
     });
+  }
+
+  Future<void> _fetchInterests() async {
+    try {
+      final interests = await ApiService.getInterests();
+      setState(() {
+        _allInterests = interests;
+      });
+    } catch (e) {
+      debugPrint('Error fetching interests: $e');
+    }
+  }
+
+  void _onInterestSelected(String? interest) {
+    setState(() {
+      _selectedInterest = interest;
+    });
+    context.read<DiscoveryProvider>().loadSuggestions(refresh: true, interest: interest);
   }
 
   @override
@@ -209,6 +230,8 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
               'Discovery',
               style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 28),
             ),
+            const SizedBox(height: 12),
+            _buildInterestChips(),
             const SizedBox(height: 16),
             Expanded(
               child: RefreshIndicator(
@@ -253,7 +276,7 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
                                         leading: CircleAvatar(
                                           backgroundColor: AppTheme.surfaceGray,
                                           backgroundImage: profile['profile_picture'] != null 
-                                              ? NetworkImage(ApiService.getMediaUrl(profile['profile_picture'])!) 
+                                              ? CachedNetworkImageProvider(ApiService.getMediaUrl(profile['profile_picture'])!) 
                                               : null,
                                           child: profile['profile_picture'] == null 
                                               ? const FaIcon(FontAwesomeIcons.user, size: 16) 
@@ -330,6 +353,43 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
     );
   }
 
+  Widget _buildInterestChips() {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _allInterests.length + 1,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            final isSelected = _selectedInterest == null;
+            return ChoiceChip(
+              label: const Text('All'),
+              selected: isSelected,
+              onSelected: (selected) => _onInterestSelected(null),
+              backgroundColor: Colors.transparent,
+              selectedColor: AppTheme.primaryViolet,
+              labelStyle: TextStyle(color: isSelected ? Colors.white : AppTheme.textMain),
+            );
+          }
+          
+          final interest = _allInterests[index - 1];
+          final name = interest['name'];
+          final isSelected = _selectedInterest == name;
+          
+          return ChoiceChip(
+            label: Text(name),
+            selected: isSelected,
+            onSelected: (selected) => _onInterestSelected(selected ? name : null),
+            backgroundColor: Colors.transparent,
+            selectedColor: AppTheme.primaryViolet,
+            labelStyle: TextStyle(color: isSelected ? Colors.white : AppTheme.textMain),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildShimmerGrid() {
     return Shimmer.fromColors(
       baseColor: AppTheme.surfaceGray,
@@ -389,10 +449,11 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
               child: Container(
                 color: AppTheme.surfaceGray,
                 child: hasLatestPostMedia
-                    ? Image.network(
-                        ApiService.getMediaUrl(latestPost['image'] ?? latestPost['video'])!,
+                    ? CachedNetworkImage(
+                        imageUrl: ApiService.getMediaUrl(latestPost['image'] ?? latestPost['video'])!,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Center(child: FaIcon(FontAwesomeIcons.image, color: Colors.white30)),
+                        placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Colors.white24)),
+                        errorWidget: (_, __, ___) => const Center(child: FaIcon(FontAwesomeIcons.image, color: Colors.white30)),
                       )
                     : Container(
                         decoration: BoxDecoration(
@@ -449,7 +510,7 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
                         backgroundColor: Colors.white,
                         child: CircleAvatar(
                           radius: 12,
-                          backgroundImage: profilePic != null ? NetworkImage(ApiService.getMediaUrl(profilePic)!) : null,
+                          backgroundImage: profilePic != null ? CachedNetworkImageProvider(ApiService.getMediaUrl(profilePic)!) : null,
                           child: profilePic == null ? const FaIcon(FontAwesomeIcons.user, size: 10) : null,
                         ),
                       ),
@@ -464,22 +525,54 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '${profile['age'] ?? '?'}${interests.isNotEmpty ? ' • $interests' : ''}',
-                    style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 11),
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${profile['age'] ?? '?'}${interests.isNotEmpty ? ' • $interests' : ''}',
+                          style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 11),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (profile['smart_snippet'] != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryViolet.withAlpha(150),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            profile['smart_snippet'],
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                    ],
                   ),
                   if ((profile['mutual_connections_count'] ?? 0) > 0)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        '${profile['mutual_connections_count']} Mutuals',
-                        style: const TextStyle(color: AppTheme.accentPink, fontSize: 10, fontWeight: FontWeight.bold),
+                      child: Row(
+                        children: [
+                          _buildMutualAvatars(profile['mutual_friend_pics'] ?? []),
+                          const SizedBox(width: 6),
+                          Text(
+                            '${profile['mutual_connections_count']} Mutuals',
+                            style: const TextStyle(color: AppTheme.accentPink, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
                     ),
                 ],
               ),
             ),
+            
+            // Live Indicator
+            if (profile['is_active'] == true)
+              Positioned(
+                top: 12,
+                left: 12,
+                child: _PulsingIndicator(),
+              ),
 
             // Connection Status Action FAB-like
             Positioned(
@@ -533,5 +626,66 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
       default:
         return const FaIcon(FontAwesomeIcons.userPlus, size: 14, color: AppTheme.primaryViolet);
     }
+  }
+
+  Widget _buildMutualAvatars(List<dynamic> pics) {
+    if (pics.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 16,
+      width: (pics.length.clamp(1, 3) * 12.0) + 4.0,
+      child: Stack(
+        children: List.generate(
+          pics.length.clamp(0, 3),
+          (index) => Positioned(
+            left: index * 12.0,
+            child: CircleAvatar(
+              radius: 8,
+              backgroundColor: Colors.white,
+              child: CircleAvatar(
+                radius: 7,
+                backgroundImage: CachedNetworkImageProvider(ApiService.getMediaUrl(pics[index])!),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PulsingIndicator extends StatefulWidget {
+  @override
+  State<_PulsingIndicator> createState() => _PulsingIndicatorState();
+}
+
+class _PulsingIndicatorState extends State<_PulsingIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat(reverse: true);
+    _animation = Tween<double>(begin: 0.5, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _animation,
+      child: Container(
+        width: 10,
+        height: 10,
+        decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle, boxShadow: [
+          BoxShadow(color: Colors.green, blurRadius: 4, spreadRadius: 1),
+        ]),
+      ),
+    );
   }
 }

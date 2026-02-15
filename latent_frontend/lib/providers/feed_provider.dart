@@ -9,20 +9,39 @@ class FeedProvider extends ChangeNotifier {
   String? _error;
   Map<String, dynamic>? _trendingLocallyPost;
   
+  int _currentPage = 1;
+  bool _hasNextPage = true;
+  
   List<Map<String, dynamic>> get posts => _isTrending ? _trendingPosts : _posts;
   bool get isLoading => _isLoading;
   bool get isTrending => _isTrending;
+  bool get hasNextPage => _hasNextPage;
   String? get error => _error;
   Map<String, dynamic>? get trendingLocallyPost => _trendingLocallyPost;
   
-  Future<void> loadFeed() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+  Future<void> loadFeed({bool refresh = false}) async {
+    if (refresh) {
+      _currentPage = 1;
+      _hasNextPage = true;
+    }
+    
+    if (_currentPage == 1) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
     
     try {
-      final data = await ApiService.getFeed();
-      _posts = List<Map<String, dynamic>>.from(data['results'] ?? []);
+      final data = await ApiService.getFeed(page: _currentPage);
+      final newPosts = List<Map<String, dynamic>>.from(data['results'] ?? []);
+      
+      if (_currentPage == 1) {
+        _posts = newPosts;
+      } else {
+        _posts.addAll(newPosts);
+      }
+      
+      _hasNextPage = data['has_next'] ?? false;
       _isTrending = false;
       _isLoading = false;
       notifyListeners();
@@ -33,14 +52,35 @@ class FeedProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> loadTrendingFeed() async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+  Future<void> loadMore() async {
+    if (_isLoading || !_hasNextPage) return;
+    _currentPage++;
+    await loadFeed();
+  }
+
+  Future<void> loadTrendingFeed({bool refresh = false}) async {
+    if (refresh) {
+      _currentPage = 1;
+      _hasNextPage = true;
+    }
+    
+    if (_currentPage == 1) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
     
     try {
-      final data = await ApiService.getTrendingFeed();
-      _trendingPosts = List<Map<String, dynamic>>.from(data['results'] ?? []);
+      final data = await ApiService.getTrendingFeed(page: _currentPage);
+      final newPosts = List<Map<String, dynamic>>.from(data['results'] ?? []);
+      
+      if (_currentPage == 1) {
+        _trendingPosts = newPosts;
+      } else {
+        _trendingPosts.addAll(newPosts);
+      }
+      
+      _hasNextPage = data['has_next'] ?? false;
       _isTrending = true;
       _isLoading = false;
       notifyListeners();
@@ -63,9 +103,9 @@ class FeedProvider extends ChangeNotifier {
   
   Future<void> refresh() async {
     if (_isTrending) {
-      await loadTrendingFeed();
+      await loadTrendingFeed(refresh: true);
     } else {
-      await loadFeed();
+      await loadFeed(refresh: true);
     }
   }
 

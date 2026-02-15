@@ -34,6 +34,10 @@ class Profile(models.Model):
     is_discovery_on = models.BooleanField(default=True)
     fcm_token = models.CharField(max_length=255, null=True, blank=True)
     
+    # Coordinates for roaming discovery (outside rooms)
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    
     # Denormalized fields for performance
     posts_count = models.PositiveIntegerField(default=0)
     connections_count = models.PositiveIntegerField(default=0)

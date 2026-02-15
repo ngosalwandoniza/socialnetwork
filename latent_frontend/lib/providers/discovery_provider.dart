@@ -74,7 +74,7 @@ class DiscoveryProvider extends ChangeNotifier {
     }
   }
   
-  Future<void> loadSuggestions({bool refresh = false}) async {
+  Future<void> loadSuggestions({bool refresh = false, String? interest}) async {
     if (refresh) {
       _currentPage = 1;
       _suggestions = [];
@@ -84,7 +84,10 @@ class DiscoveryProvider extends ChangeNotifier {
     notifyListeners();
     
     try {
-      final data = await ApiService.getSuggestedPeople(page: _currentPage);
+      final data = await ApiService.getSuggestedPeople(
+        page: _currentPage,
+        interest: interest,
+      );
       final newSuggestions = List<Map<String, dynamic>>.from(data['results']);
       _suggestions.addAll(newSuggestions);
       _hasNextPage = data['has_next'];

@@ -52,6 +52,7 @@ dependencies:
   video_compress: ^3.1.4
   flutter_image_compress: ^2.4.0
   shimmer: ^3.0.0
+  web_socket_channel: ^3.0.1
   sqflite: ^2.4.1
   sqflite_common_ffi: ^2.3.5
   sqlite3_flutter_libs: ^0.5.24

@@ -1,0 +1,6 @@
+﻿Analyzing discovery_grid.dart...
+
+warning - discovery_grid.dart:17:8 - Duplicate import. Try removing all but one import of the library. - duplicate_import
+warning - discovery_grid.dart:20:8 - Unused import: 'friend_list_screen.dart'. Try removing the import directive. - unused_import
+
+2 issues found.

@@ -74,17 +74,15 @@ class FeedView(views.APIView):
     def get(self, request):
         page = int(request.query_params.get('page', 1))
         page_size = 20
-        start = (page - 1) * page_size
-        end = start + page_size
+        shuffle = request.query_params.get('random') == 'true'
         
         profile = request.user.profile
-        posts = FeedService.get_local_feed(user_profile=profile, limit=100) # Get a larger pool for ranking
+        posts = FeedService.get_local_feed(user_profile=profile, page=page, page_size=page_size, shuffle=shuffle)
         
-        paginated_posts = posts[start:end]
-        serializer = PostSerializer(paginated_posts, many=True, context={'request': request})
+        serializer = PostSerializer(posts, many=True, context={'request': request})
         return response.Response({
             'results': serializer.data,
-            'has_next': len(posts) > end
+            'has_next': len(posts) == page_size
         })
 
 
@@ -92,15 +90,14 @@ class TrendingFeedView(views.APIView):
     def get(self, request):
         page = int(request.query_params.get('page', 1))
         page_size = 20
-        start = (page - 1) * page_size
-        end = start + page_size
+        shuffle = request.query_params.get('random') == 'true'
         
-        posts = FeedService.get_trending_feed(limit=100)
-        paginated_posts = posts[start:end]
-        serializer = PostSerializer(paginated_posts, many=True, context={'request': request})
+        posts = FeedService.get_trending_feed(page=page, page_size=page_size, shuffle=shuffle)
+        
+        serializer = PostSerializer(posts, many=True, context={'request': request})
         return response.Response({
             'results': serializer.data,
-            'has_next': len(posts) > end
+            'has_next': len(posts) == page_size
         })
 
 
@@ -241,19 +238,21 @@ class SuggestedPeopleView(views.APIView):
     def get(self, request):
         page = int(request.query_params.get('page', 1))
         page_size = 15
-        start = (page - 1) * page_size
-        end = start + page_size
+        interest_filter = request.query_params.get('interest')
         
         profile = request.user.profile
-        suggestions = MatchService.get_suggested_people(user_profile=profile, limit=60)
+        suggestions = MatchService.get_suggested_people(user_profile=profile, limit=page_size * 2)
         
-        paginated_suggestions = suggestions[start:end]
+        # Apply frontend filter if interest_filter is provided
+        if interest_filter:
+            suggestions = [s for s in suggestions if any(i.name.lower() == interest_filter.lower() for i in s.interests.all())]
+            
+        paginated_suggestions = suggestions[:page_size]
         
-        # Connection status is handled by Serializer context
         serializer = ProfileSerializer(paginated_suggestions, many=True, context={'request': request})
         return response.Response({
             'results': serializer.data,
-            'has_next': len(suggestions) > end
+            'has_next': len(suggestions) > page_size
         })
 
 
@@ -306,7 +305,7 @@ class ConnectionListView(views.APIView):
         profile = request.user.profile
         connections = Connection.objects.filter(
             Q(sender=profile, status='CONNECTED') | Q(receiver=profile, status='CONNECTED')
-        )
+        ).select_related('sender', 'receiver')
         serializer = ConnectionSerializer(connections, many=True)
         return response.Response(serializer.data)
 
@@ -435,15 +434,27 @@ class ChatMessagesView(views.APIView):
         except Profile.DoesNotExist:
             return response.Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
         
+        page = int(request.query_params.get('page', 1))
+        page_size = 20
+        start = (page - 1) * page_size
+        end = start + page_size
+        
+        # Get messages in reverse order for pagination, then flip back for display
         messages = ChatMessage.objects.filter(
             Q(sender=profile, receiver=other_user) | Q(sender=other_user, receiver=profile)
-        ).order_by('timestamp')
+        ).select_related('sender', 'receiver').order_by('-timestamp')[start:end]
         
         # Mark messages as read
         ChatMessage.objects.filter(sender=other_user, receiver=profile, is_read=False).update(is_read=True)
         
-        serializer = ChatMessageSerializer(messages, many=True)
-        return response.Response(serializer.data)
+        # Re-order to chronological for the frontend
+        msg_list = sorted(list(messages), key=lambda x: x.timestamp)
+        serializer = ChatMessageSerializer(msg_list, many=True)
+        
+        return response.Response({
+            'results': serializer.data,
+            'has_next': len(msg_list) == page_size
+        })
 
 
 class SendMessageView(views.APIView):

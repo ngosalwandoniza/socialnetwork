@@ -24,13 +24,12 @@ class SyncService {
   void start() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 15), (timer) async {
-      for (final task in _tasks) {
-        try {
-          await task();
-        } catch (e) {
+      // Run all tasks in parallel to reduce total poll time
+      await Future.wait(
+        _tasks.map((task) => task().catchError((e) {
           debugPrint('SyncService task error: $e');
-        }
-      }
+        })),
+      );
     });
   }
 

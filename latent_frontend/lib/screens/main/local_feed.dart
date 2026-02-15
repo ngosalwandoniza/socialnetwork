@@ -22,6 +22,7 @@ class LocalFeed extends StatefulWidget {
 class _LocalFeedState extends State<LocalFeed> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final Map<int, bool> _likedStates = {};
+  final Map<int, bool> _coverFitStates = {}; // true = cover (default), false = contain
 
   @override
   void initState() {
@@ -77,6 +78,12 @@ class _LocalFeedState extends State<LocalFeed> with SingleTickerProviderStateMix
                   scrollDirection: Axis.vertical,
                   itemCount: feedProvider.posts.length,
                   itemBuilder: (context, index) {
+                    // Trigger load more when near the end
+                    if (index >= feedProvider.posts.length - 3 && feedProvider.hasNextPage) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        feedProvider.loadMore();
+                      });
+                    }
                     return _buildTikTokFeedItem(context, feedProvider.posts[index], index, feedProvider);
                   },
                 ),
@@ -98,15 +105,48 @@ class _LocalFeedState extends State<LocalFeed> with SingleTickerProviderStateMix
           child: hasVideo
               ? PostVideoPlayer(videoUrl: post['video'])
               : hasImage
-                  ? Image.network(
-                      ApiService.getMediaUrl(post['image'])!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Center(
-                        child: FaIcon(
-                          FontAwesomeIcons.image,
-                          size: 80,
-                          color: Colors.white.withAlpha(50),
-                        ),
+                  ? GestureDetector(
+                      onDoubleTap: () {
+                        setState(() {
+                          final postId = post['id'] ?? index;
+                          _coverFitStates[postId] = !(_coverFitStates[postId] ?? true);
+                        });
+                      },
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CachedNetworkImage(
+                            imageUrl: ApiService.getMediaUrl(post['image'])!,
+                            fit: (_coverFitStates[post['id'] ?? index] ?? true) ? BoxFit.cover : BoxFit.contain,
+                            placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Colors.white24)),
+                            errorWidget: (context, url, error) => Center(
+                              child: FaIcon(
+                                FontAwesomeIcons.image,
+                                size: 80,
+                                color: Colors.white.withAlpha(50),
+                              ),
+                            ),
+                          ),
+                          // Small indicator for fit mode
+                          Positioned(
+                            top: 12,
+                            right: 12,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withAlpha(100),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                (_coverFitStates[post['id'] ?? index] ?? true)
+                                    ? Icons.crop_free_rounded
+                                    : Icons.fit_screen_rounded,
+                                color: Colors.white70,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     )
                   : Center(

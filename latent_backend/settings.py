@@ -35,6 +35,7 @@ ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '10.23.1.3,127.0.0.1,localhost
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -45,6 +46,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'storages',
+    'channels',
     'core',
 ]
 
@@ -77,6 +79,25 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'latent_backend.wsgi.application'
+ASGI_APPLICATION = 'latent_backend.asgi.application'
+
+# Django Channels - Channel Layer
+_redis_url = os.getenv('REDIS_URL')
+if _redis_url:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [_redis_url],
+            },
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
 
 
 # Database

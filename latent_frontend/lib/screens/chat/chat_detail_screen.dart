@@ -33,9 +33,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   File? _selectedVideo;
   bool _isSending = false;
 
+  Timer? _typingTimer;
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
+    _messageController.addListener(_onMessageChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final chatProvider = context.read<ChatProvider>();
       chatProvider.loadMessages(widget.userId);
@@ -43,9 +47,35 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     });
   }
 
+  void _onMessageChanged() {
+    if (_messageController.text.isNotEmpty) {
+      _sendTypingIndicator();
+    }
+  }
+
+  void _sendTypingIndicator() {
+    if (_typingTimer?.isActive ?? false) return;
+    
+    // Send typing signal
+    context.read<ChatProvider>().sendTyping();
+    
+    // Debounce: don't send another typing signal for 3 seconds
+    _typingTimer = Timer(const Duration(seconds: 3), () {});
+  }
+
+  void _onScroll() {
+    // Load older messages when scrolled near the top
+    if (_scrollController.position.pixels < 100 && _scrollController.position.pixels >= 0) {
+      context.read<ChatProvider>().loadMoreMessages();
+    }
+  }
+
   @override
   void dispose() {
+    _typingTimer?.cancel();
+    _messageController.removeListener(_onMessageChanged);
     _messageController.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     // Clear current chat synchronously before disposal
     Provider.of<ChatProvider>(context, listen: false).clearCurrentChat();
@@ -75,7 +105,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final content = _messageController.text.trim();
     if (content.isEmpty && _selectedImage == null && _selectedVideo == null) return;
     
-    setState(() => _isSending = true);
+    setState(() => _isSending = false); // Change to false since we use optimistic UI
     
     final image = _selectedImage;
     final video = _selectedVideo;
@@ -87,24 +117,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     });
 
     // Optimistic UI: Add a placeholder message locally via provider
-    final authProvider = context.read<AuthProvider>();
-    final currentUserId = authProvider.currentUser?['id'];
-    
-    // Pass a temporary id or timestamp to track it
-    final tempId = DateTime.now().millisecondsSinceEpoch;
-    
-    // We add it to the provider's local list first (I'll need to add a method for this or update sendMessage)
-    // For now, let's update ChatProvider.sendMessage to handle the optimistic part
     await context.read<ChatProvider>().sendMessage(
       widget.userId, 
       content: content.isNotEmpty ? content : null,
       image: image,
       video: video,
-      isOptimistic: true, // We'll add this flag
+      isOptimistic: true,
     );
 
-    setState(() => _isSending = false);
-    
     // Scroll to bottom
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -121,6 +141,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     final authProvider = context.watch<AuthProvider>();
     final messages = chatProvider.currentMessages;
     final currentUserId = authProvider.currentUser?['id'];
+    final isTyping = chatProvider.isUserTyping(widget.userId);
 
     return Scaffold(
       appBar: AppBar(
@@ -137,7 +158,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   : null,
             ),
             const SizedBox(width: 12),
-            Text(widget.userName, style: const TextStyle(fontSize: 18)),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(widget.userName, style: const TextStyle(fontSize: 16)),
+                if (isTyping)
+                  const Text(
+                    'Typing...',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.primaryViolet,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+              ],
+            ),
           ],
         ),
         actions: [

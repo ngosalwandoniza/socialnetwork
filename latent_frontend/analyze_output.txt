@@ -1,0 +1,5 @@
+﻿Analyzing discovery_grid.dart...
+
+  error - discovery_grid.dart:35:11 - The name 'ProfileScreen' isn't a class. Try correcting the name to match an existing class. - creation_with_non_type
+
+1 issue found.

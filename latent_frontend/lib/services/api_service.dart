@@ -226,10 +226,11 @@ class ApiService {
     }
   }
   
-  static Future<Map<String, dynamic>> getFeed({int page = 1}) async {
+  static Future<Map<String, dynamic>> getFeed({int page = 1, bool random = false}) async {
     final headers = await _authHeaders();
+    final url = '$baseUrl/feed/?page=$page${random ? '&random=true' : ''}';
     final response = await http.get(
-      Uri.parse('$baseUrl/feed/?page=$page'),
+      Uri.parse(url),
       headers: headers,
     );
     
@@ -240,10 +241,25 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> getTrendingFeed({int page = 1}) async {
+  static Future<Map<String, dynamic>> getChatMessages(int userId, {int page = 1}) async {
     final headers = await _authHeaders();
     final response = await http.get(
-      Uri.parse('$baseUrl/feed/trending/?page=$page'),
+      Uri.parse('$baseUrl/chat/$userId/?page=$page'),
+      headers: headers,
+    );
+    
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to get chat messages: ${response.body}');
+    }
+  }
+
+  static Future<Map<String, dynamic>> getTrendingFeed({int page = 1, bool random = false}) async {
+    final headers = await _authHeaders();
+    final url = '$baseUrl/feed/trending/?page=$page${random ? '&random=true' : ''}';
+    final response = await http.get(
+      Uri.parse(url),
       headers: headers,
     );
     
@@ -339,10 +355,11 @@ class ApiService {
   }
   
   // Discovery Endpoints
-  static Future<Map<String, dynamic>> getSuggestedPeople({int page = 1}) async {
+  static Future<Map<String, dynamic>> getSuggestedPeople({int page = 1, String? interest}) async {
     final headers = await _authHeaders();
+    final url = '$baseUrl/suggested/?page=$page${interest != null ? '&interest=$interest' : ''}';
     final response = await http.get(
-      Uri.parse('$baseUrl/suggested/?page=$page'),
+      Uri.parse(url),
       headers: headers,
     );
     
@@ -488,19 +505,6 @@ class ApiService {
     }
   }
   
-  static Future<List<dynamic>> getChatMessages(int userId) async {
-    final headers = await _authHeaders();
-    final response = await http.get(
-      Uri.parse('$baseUrl/chat/$userId/'),
-      headers: headers,
-    );
-    
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Failed to get messages: ${response.body}');
-    }
-  }
   
   static Future<Map<String, dynamic>> sendMessage(int userId, {String? content, File? image, File? video, File? thumbnail}) async {
     final token = await getToken();

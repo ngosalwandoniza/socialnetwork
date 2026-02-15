@@ -8,6 +8,9 @@ python-dotenv>=1.0
 
 # Production Server
 gunicorn>=21.0
+daphne>=4.0
+channels>=4.0
+channels_redis>=4.1
 
 # Database (Production)
 psycopg2-binary>=2.9
