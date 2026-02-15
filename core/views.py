@@ -113,6 +113,9 @@ class CreatePostView(views.APIView):
             # Update streak
             if profile.current_location:
                 StreakService.update_streak(profile, profile.current_location)
+            
+            # Sync counts
+            profile.refresh_gravity()
                 
             return response.Response(PostSerializer(post, context={'request': request}).data, status=status.HTTP_201_CREATED)
         return response.Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -127,6 +130,7 @@ class DeletePostView(views.APIView):
             return response.Response({"error": "Post not found or you're not the author"}, status=status.HTTP_404_NOT_FOUND)
         
         post.delete()
+        profile.refresh_gravity()
         return response.Response({"message": "Post deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
 
 

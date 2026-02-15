@@ -428,24 +428,11 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
                         placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Colors.white24)),
                         errorWidget: (_, __, ___) => const Center(child: FaIcon(FontAwesomeIcons.image, color: Colors.white30)),
                       )
-                    : Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              AppTheme.primaryViolet.withAlpha(200),
-                              AppTheme.accentPink.withAlpha(200),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        child: Center(
-                          child: Opacity(
-                            opacity: 0.1,
-                            child: FaIcon(FontAwesomeIcons.userAstronaut, size: 80, color: Colors.white),
-                          ),
-                        ),
-                      ),
               ),
             ),
 
@@ -490,7 +477,7 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          profile['username'] ?? 'User',
+                          profile['username'] ?? 'Latent User',
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -502,7 +489,7 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
                     children: [
                       Expanded(
                         child: Text(
-                          '${profile['age'] ?? '?'}${interests.isNotEmpty ? ' • $interests' : ''}',
+                          '${profile['age'] ?? '—'}${interests.isNotEmpty ? ' • $interests' : ''}',
                           style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 11),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -661,4 +648,85 @@ class _PulsingIndicatorState extends State<_PulsingIndicator> with SingleTickerP
       ),
     );
   }
+}
+class PremiumDiscoveryPlaceholder extends StatelessWidget {
+  final String username;
+  const PremiumDiscoveryPlaceholder({super.key, required this.username});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF0F172A), // Slate 900
+      ),
+      child: Stack(
+        children: [
+          CustomPaint(
+            painter: MeshPainter(),
+            size: Size.infinite,
+          ),
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withAlpha(30), width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryViolet.withAlpha(40),
+                        blurRadius: 30,
+                        spreadRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: FaIcon(
+                    FontAwesomeIcons.solidUserCircle,
+                    size: 60,
+                    color: Colors.white.withAlpha(40),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  username.characters.firstOrNull?.toUpperCase() ?? 'L',
+                  style: TextStyle(
+                    fontSize: 40,
+                    fontWeight: FontWeight.w200,
+                    color: Colors.white.withAlpha(20),
+                    letterSpacing: 4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class MeshPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint();
+    
+    // Abstract mesh blobs
+    final blobs = [
+      {'pos': Offset(size.width * 0.2, size.height * 0.3), 'size': size.width * 0.6, 'color': AppTheme.primaryViolet.withAlpha(40)},
+      {'pos': Offset(size.width * 0.8, size.height * 0.7), 'size': size.width * 0.5, 'color': AppTheme.accentPink.withAlpha(30)},
+      {'pos': Offset(size.width * 0.5, size.height * 0.5), 'size': size.width * 0.8, 'color': const Color(0xFF4F46E5).withAlpha(20)},
+    ];
+
+    for (var blob in blobs) {
+      paint.shader = RadialGradient(
+        colors: [blob['color'] as Color, (blob['color'] as Color).withAlpha(0)],
+      ).createShader(Rect.fromCircle(center: blob['pos'] as Offset, radius: blob['size'] as double));
+      canvas.drawCircle(blob['pos'] as Offset, blob['size'] as double, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

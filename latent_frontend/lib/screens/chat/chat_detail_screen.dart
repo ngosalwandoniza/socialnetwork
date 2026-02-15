@@ -234,103 +234,108 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   Widget _buildMessageBubble(String? text, bool isMe, String? timestamp, {String? image, String? video, String? thumbnail, bool isSending = false}) {
+    final bubbleColor = isMe ? AppTheme.primaryViolet : Colors.white;
+    final textColor = isMe ? Colors.white : AppTheme.textMain;
+
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        decoration: BoxDecoration(
-          color: isMe ? AppTheme.primaryViolet : AppTheme.surfaceGray,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMe ? 16 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 16),
-          ),
-        ),
+        margin: const EdgeInsets.only(bottom: 16),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.8),
         child: Column(
           crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (image != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: image.startsWith('/') // Local path
-                    ? Image.file(File(image), height: 200, width: double.infinity, fit: BoxFit.cover)
-                    : CachedNetworkImage(
-                        imageUrl: ApiService.getMediaUrl(image)!,
-                        placeholder: (context, url) => const SizedBox(height: 200, width: double.infinity, child: Center(child: CircularProgressIndicator())),
-                        errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
-                        fit: BoxFit.cover,
-                      ),
+            Container(
+              decoration: BoxDecoration(
+                color: bubbleColor,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(20),
+                  topRight: const Radius.circular(20),
+                  bottomLeft: Radius.circular(isMe ? 20 : 4),
+                  bottomRight: Radius.circular(isMe ? 4 : 20),
                 ),
-              ),
-            if (video != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      if (thumbnail != null)
-                        thumbnail.startsWith('/') // Local path
-                          ? Image.file(File(thumbnail), height: 200, width: double.infinity, fit: BoxFit.cover)
-                          : CachedNetworkImage(
-                              imageUrl: ApiService.getMediaUrl(thumbnail)!,
-                              placeholder: (context, url) => const SizedBox(height: 200, width: double.infinity, child: Center(child: CircularProgressIndicator())),
-                              errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
-                              fit: BoxFit.cover,
-                            )
-                      else
-                        Container(
-                          height: 200,
-                          width: double.infinity,
-                          color: Colors.black26,
-                          child: const Center(child: FaIcon(FontAwesomeIcons.video, size: 32, color: Colors.white24)),
-                        ),
-                      // Play Icon Overlay
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withAlpha(50),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const FaIcon(FontAwesomeIcons.play, size: 20, color: Colors.white),
-                      ),
-                    ],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withAlpha(isMe ? 25 : 15),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
-                ),
+                ],
               ),
-            if (text != null && text.isNotEmpty)
-              Text(
-                text,
-                style: TextStyle(color: isMe ? Colors.white : AppTheme.textMain),
-              ),
-            if (timestamp != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _formatTime(timestamp),
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: isMe ? Colors.white.withAlpha(180) : AppTheme.textSecondary,
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (image != null)
+                    _buildMediaPreview(image, isVideo: false),
+                  if (video != null)
+                    _buildMediaPreview(video, isVideo: true, thumbnail: thumbnail),
+                  if (text != null && text.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: Text(
+                        text,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 15,
+                          height: 1.4,
+                        ),
                       ),
                     ),
-                    if (isMe) ...[
-                      const SizedBox(width: 4),
-                      isSending
-                        ? const FaIcon(FontAwesomeIcons.clock, size: 8, color: Colors.white70)
-                        : const FaIcon(FontAwesomeIcons.check, size: 8, color: Colors.white),
-                    ],
-                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!isMe) const SizedBox(width: 4),
+                Text(
+                  _formatTime(timestamp ?? DateTime.now().toIso8601String()),
+                  style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
                 ),
+                if (isMe) ...[
+                  const SizedBox(width: 4),
+                  isSending
+                      ? const FaIcon(FontAwesomeIcons.clock, size: 9, color: AppTheme.textSecondary)
+                      : const FaIcon(FontAwesomeIcons.checkDouble, size: 10, color: AppTheme.primaryViolet),
+                ],
+                if (isMe) const SizedBox(width: 4),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMediaPreview(String path, {required bool isVideo, String? thumbnail}) {
+    return GestureDetector(
+      onTap: () {
+        // Implement full screen preview if needed
+      },
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 300),
+        width: double.infinity,
+        color: AppTheme.surfaceGray,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            path.startsWith('/') 
+              ? Image.file(File(isVideo ? (thumbnail ?? path) : path), fit: BoxFit.cover, width: double.infinity)
+              : CachedNetworkImage(
+                  imageUrl: ApiService.getMediaUrl(isVideo ? (thumbnail ?? path) : path)!,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  placeholder: (context, url) => Container(color: Colors.black12, child: const Center(child: CircularProgressIndicator())),
+                  errorWidget: (context, url, error) => const Center(child: Icon(Icons.error_outline)),
+                ),
+            if (isVideo)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.black.withAlpha(80), shape: BoxShape.circle),
+                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 40),
               ),
           ],
         ),
@@ -385,7 +390,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             ),
           ),
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             color: Colors.white,
             boxShadow: [
@@ -395,25 +400,35 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
           child: SafeArea(
             child: Row(
               children: [
-                IconButton(
-                  icon: const FaIcon(FontAwesomeIcons.circlePlus, color: AppTheme.primaryViolet, size: 24),
-                  onPressed: _showMediaPicker,
+                GestureDetector(
+                  onTap: _showMediaPicker,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceGray,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const FaIcon(FontAwesomeIcons.circlePlus, size: 20, color: AppTheme.primaryViolet),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: TextFormField(
-                    controller: _messageController,
-                    textInputAction: TextInputAction.send,
-                    onFieldSubmitted: (_) => _sendMessage(),
-                    decoration: InputDecoration(
-                      hintText: 'Type a message...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceGray,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: TextField(
+                      controller: _messageController,
+                      decoration: const InputDecoration(
+                        hintText: 'Type a message...',
+                        border: InputBorder.none,
+                        hintStyle: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
                       ),
-                      filled: true,
-                      fillColor: AppTheme.surfaceGray,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      style: const TextStyle(fontSize: 14),
+                      maxLines: 4,
+                      minLines: 1,
                     ),
                   ),
                 ),
@@ -422,7 +437,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2))
                   : GestureDetector(
                       onTap: _sendMessage,
-                      child: const FaIcon(FontAwesomeIcons.solidPaperPlane, color: AppTheme.primaryViolet, size: 22),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [AppTheme.primaryViolet, AppTheme.accentPink],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const FaIcon(FontAwesomeIcons.solidPaperPlane, color: Colors.white, size: 18),
+                      ),
                     ),
               ],
             ),

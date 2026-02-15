@@ -33,18 +33,20 @@ class ProfileScreen extends StatelessWidget {
               alignment: Alignment.center,
               children: [
                 Container(
-                  height: 200,
+                  height: 220,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        const Color(0xFF1A0533),  // Deep charcoal purple
-                        AppTheme.primaryViolet.withAlpha(220),
-                        const Color(0xFF0D1B2A),  // Dark navy
+                        const Color(0xFF0F172A), // Slate 900
+                        const Color(0xFF1E293B), // Slate 800
+                        const Color(0xFF334155), // Slate 700
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      stops: const [0.0, 0.5, 1.0],
                     ),
+                  ),
+                  child: CustomPaint(
+                    painter: PremiumMeshPainter(),
                   ),
                 ),
                 Positioned(
@@ -416,6 +418,49 @@ class ProfileScreen extends StatelessWidget {
     return Chip(
       label: Text(label),
       backgroundColor: AppTheme.surfaceGray,
+      labelStyle: const TextStyle(fontSize: 12),
+      side: BorderSide.none,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    );
+  }
+}
+
+class PremiumMeshPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint();
+    
+    // Abstract blob 1
+    paint.shader = RadialGradient(
+      colors: [
+        AppTheme.primaryViolet.withAlpha(40),
+        AppTheme.primaryViolet.withAlpha(0),
+      ],
+    ).createShader(Rect.fromLTWH(size.width * 0.1, size.height * 0.1, size.width * 0.6, size.height * 0.8));
+    canvas.drawCircle(Offset(size.width * 0.4, size.height * 0.5), size.width * 0.4, paint);
+
+    // Abstract blob 2
+    paint.shader = RadialGradient(
+      colors: [
+        AppTheme.accentPink.withAlpha(30),
+        AppTheme.accentPink.withAlpha(0),
+      ],
+    ).createShader(Rect.fromLTWH(size.width * 0.4, size.height * 0.3, size.width * 0.5, size.height * 0.6));
+    canvas.drawCircle(Offset(size.width * 0.7, size.height * 0.3), size.width * 0.3, paint);
+    
+    // Abstract blob 3
+    paint.shader = RadialGradient(
+      colors: [
+        const Color(0xFF4F46E5).withAlpha(20), // Indigo
+        const Color(0xFF4F46E5).withAlpha(0),
+      ],
+    ).createShader(Rect.fromLTWH(0, size.height * 0.5, size.width * 0.5, size.height * 0.5));
+    canvas.drawCircle(Offset(size.width * 0.1, size.height * 0.8), size.width * 0.4, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}      backgroundColor: AppTheme.surfaceGray,
       side: BorderSide.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     );
