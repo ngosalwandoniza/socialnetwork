@@ -252,7 +252,13 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
                                   ),
                                 ),
                                 Expanded(
-                                  child: ListView.builder(
+                                  child: GridView.builder(
+                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2,
+                                      crossAxisSpacing: 16,
+                                      mainAxisSpacing: 16,
+                                      childAspectRatio: 0.6,
+                                    ),
                                     itemCount: discoveryProvider.friends.length,
                                     itemBuilder: (context, index) {
                                       final conn = discoveryProvider.friends[index];
@@ -265,49 +271,16 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
                                         'username': conn['receiver_name'],
                                         'profile_picture': conn['receiver_pic'],
                                         'connection_status': 'CONNECTED',
+                                        'is_active': conn['receiver_is_active'] ?? false,
                                       } : {
                                         'id': conn['sender'],
                                         'username': conn['sender_name'],
                                         'profile_picture': conn['sender_pic'],
                                         'connection_status': 'CONNECTED',
+                                        'is_active': conn['sender_is_active'] ?? false,
                                       };
 
-                                      return ListTile(
-                                        leading: CircleAvatar(
-                                          backgroundColor: AppTheme.surfaceGray,
-                                          backgroundImage: profile['profile_picture'] != null 
-                                              ? CachedNetworkImageProvider(ApiService.getMediaUrl(profile['profile_picture'])!) 
-                                              : null,
-                                          child: profile['profile_picture'] == null 
-                                              ? const FaIcon(FontAwesomeIcons.user, size: 16) 
-                                              : null,
-                                        ),
-                                        title: Text(profile['username'] ?? 'Friend', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                        subtitle: const Text('Connected'),
-                                        trailing: IconButton(
-                                          icon: const FaIcon(FontAwesomeIcons.solidCommentDots, size: 18, color: AppTheme.primaryViolet),
-                                          onPressed: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => ChatDetailScreen(
-                                                  userId: profile['id'],
-                                                  userName: profile['username'],
-                                                  userProfilePicture: profile['profile_picture'],
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                        onTap: () {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => ProfileDetailScreen(profile: profile),
-                                            ),
-                                          );
-                                        },
-                                      );
+                                      return _buildProfileCard(context, profile, discoveryProvider);
                                     },
                                   ),
                                 ),
