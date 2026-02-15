@@ -56,6 +56,7 @@ dependencies:
   sqflite: ^2.4.1
   sqflite_common_ffi: ^2.3.5
   sqlite3_flutter_libs: ^0.5.24
+  intl: ^0.18.0
 
 dependency_overrides:
   win32: ^5.11.0

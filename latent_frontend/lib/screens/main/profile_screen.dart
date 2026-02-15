@@ -419,7 +419,7 @@ class ProfileScreen extends StatelessWidget {
       label: Text(label),
       backgroundColor: AppTheme.surfaceGray,
       labelStyle: const TextStyle(fontSize: 12),
-      side: BorderSide.none,
+      side: const BorderSide(color: Colors.transparent),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     );
   }
@@ -460,9 +460,4 @@ class PremiumMeshPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}      backgroundColor: AppTheme.surfaceGray,
-      side: BorderSide.none,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-    );
-  }
 }

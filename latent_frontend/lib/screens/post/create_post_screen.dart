@@ -294,7 +294,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   void _showMediaOptions() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {

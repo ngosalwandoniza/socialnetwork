@@ -86,7 +86,7 @@ class _CollaborativePostDetailScreenState extends State<CollaborativePostDetailS
       context: context,
       backgroundColor: Colors.white,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {

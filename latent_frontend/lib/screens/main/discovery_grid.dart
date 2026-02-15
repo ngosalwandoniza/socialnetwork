@@ -428,11 +428,7 @@ class _DiscoveryBodyState extends State<DiscoveryBody> {
                         placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: Colors.white24)),
                         errorWidget: (_, __, ___) => const Center(child: FaIcon(FontAwesomeIcons.image, color: Colors.white30)),
                       )
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                    : PremiumDiscoveryPlaceholder(username: profile['username'] ?? 'Latent Space Explorer'),
               ),
             ),
 
